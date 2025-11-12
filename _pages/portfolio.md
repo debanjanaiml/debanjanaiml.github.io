@@ -8,6 +8,27 @@ toc_icon: "bookmark"
 ---
 *Updated: 08/12/2020*
 
+## Featured
+
+### Customer Profiling
+
+<img src="assets/images/portfolio/customer-profiling.png" width="200">
+
+Complete end to end customer profiling using historic retail sales data and customer demographics to derive insights into various customer behavior patterns using data mining techniques such as unsupervised RFM clustering, and application of various regression and classification tasks, thereby create a holistic customer profile.
+
+[![View on GitHub](https://img.shields.io/badge/GitHub-View_on_GitHub-blue?logo=GitHub)](https://github.com/debanjansaha-git/CustomerProfiling)
+
+
+
+### End-to-end MLOps for Speech Emotion Recognition
+
+<img src="assets/images/portfolio/ser_600_474.png" width="200">
+
+Complete end to end MLOps on GCP using Vertex AI wherein I try to detect the emotions (e.g., happiness, sadness, anger) from the raw audio signals. This project highlights all the stages of a machine learning project starting from data collection, feature engineering, modeling, deployment and monitoring.
+
+[![View on GitHub](https://img.shields.io/badge/GitHub-View_on_GitHub-blue?logo=GitHub)](https://github.com/debanjansaha-git/speech-emotion-recognition)
+
+
 ## 🤖 Computer Vision
 ### Object Detection with Detectron2
 
