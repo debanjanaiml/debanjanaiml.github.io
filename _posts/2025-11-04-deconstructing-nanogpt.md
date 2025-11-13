@@ -102,7 +102,7 @@ Used to simulate a larger batch size than what fits in a single GPU's memory. Th
 
 The Global Effective Batch Size is calculated as: 
 
-$$B_{global} = B_{micro} \times T \times A \times N_{GPUs}$ = $12 \times 1024 \times 5 \times 8 \approx \textbf{491,520 tokens}$$
+$$B_{global} = B_{micro} \times T \times A \times N_{GPUs} = 12 \times 1024 \times 5 \times 8 \approx \textbf{491,520 tokens}$$
 
 ```python
 max_iters = 600000
@@ -894,20 +894,22 @@ Allows a pre-trained model (trained on $T=1024$) to be used efficiently with sma
 
 
 ```python
-@classmethod def from_pretrained(...)
+@classmethod 
+def from_pretrained(...)
 ```
 **Loading Pretrained Weights**: A class method to download official Hugging Face GPT-2 weights and transfer them to the NanoGPT structure.
 
 This is the key step that allows NanoGPT to immediately use the power of official GPT-2 models.
 
 ```python
-sd_keys_hf = ... transposed = [...] ...
+sd_keys_hf = ... 
+transposed = [...] ...
 ```
-**Weight Alignment and Transposition**: Filters keys and handles the Conv1D vs. Linear mismatch.
+**Weight Alignment and Transposition**: Filters keys and handles the `Conv1D` vs. `Linear` mismatch.
 
-Official OpenAI weights use a PyTorch implementation of Conv1D which stores weights in $(\mathbf{C}_{\text{out}}, \mathbf{C}_{\text{in}})$. 
+Official OpenAI weights use a PyTorch implementation of `Conv1D` which stores weights in $(\mathbf{C}_{\text{out}}, \mathbf{C}_{\text{in}})$. 
 
-NanoGPT uses standard nn.Linear, which expects $(\mathbf{C}_{\text{in}}, \mathbf{C}_{\text{out}})$. These weights must be transposed (.t()) during transfer.
+NanoGPT uses standard nn.Linear, which expects $(\mathbf{C}_{\text{in}}, \mathbf{C}_{\text{out}})$. These weights must be transposed (`.t()`) during transfer.
 
 ```python
 def configure_optimizers(...)
