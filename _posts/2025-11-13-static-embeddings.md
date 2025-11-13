@@ -1666,6 +1666,18 @@ for word, sim in neighbors:
 FastText solves the limitations of Word2Vec and GloVe by incorporating sub-word information. 
 The key takeaway is its ability to **generate a vector for any word, regardless of whether it was seen during training**, provided it is composed of known character n-grams. This makes it highly robust for datasets with specialized terminology, misspellings, or highly inflected languages.
 
+# Applications
+
+Now that we have covered almost all the commonly used static embedding techniques, and given their drawbacks, the prime of which includes static embeddings have fixed vectors for a given word, i.e, the vectors don't change with relation to the context surrounding it, one might wonder what is the actual use-case for these techniques given we can use contextual embeddings which can capture more semantic meaning for a given context. Well, that is true that the contextual embeddings are far superior to static ones, however, static embeddings find their use in the following cases:
+
+1. **Extreme Latency Constraints (Real-Time Systems)**: Contextual models (BERT) are too slow, often requiring specialized hardware (GPUs/TPUs) for inference. Static embeddings (like Hashing Vectorizer, TF-IDF) convert text to vectors instantly (especially Hashing or pre-computed TF-IDF) on a CPU, which is crucial for high-throughput, low-latency APIs. 
+2. **Cold Start Problem in Recommenders**: In collaborative filtering, you often need to represent new, unseen items (e.g., a news article with text) quickly. You can compute a FastText vector on the fly, as it doesn't need to be in the vocabulary, and use that vector immediately to seed recommendations.
+3. **Memory/Storage Constraints (Edge Devices)**: Full contextual models weigh hundreds of megabytes or even gigabytes. Static embeddings (Word2Vec, GloVe) often result in model files (vocabulary and weights) that are only a few megabytes in size. This is essential for applications running on mobile devices or IoT platforms.
+4. **Feature Engineering for Classic ML**: If you are using traditional machine learning models (e.g., Random Forest, Gradient Boosting) which do not handle sequence data, you must use a fixed-length feature vector. Averaged static embeddings (like an average Word2Vec vector per document) provide the perfect, efficient input features.
+5. **Languages with High Inflection (Morphology)**: For languages like Turkish, Finnish, or Arabic, words can have thousands of forms (e.g., conjugation). FastText's sub-word mechanism natively handles this complexity and provides a robust vector for any new inflection, performing better than a context-agnostic Word2Vec model trained on those languages.FastText
+6. **Simple Topic Modeling & Clustering**: For quick, unsupervised tasks where general document similarity is needed (e.g., clustering news articles), TF-IDF provides highly interpretable feature weights. You can easily inspect the TF-IDF features to understand what defines each cluster, which is difficult with dense, abstract contextual vectors.TF-IDF
+7. **Search bar applications**: It has been noted that if a search query takes longer times to load the results, customer often leave the app, causing something known as dropoff. In such cases you need a lightweight embedding technique which can quickly convert the search query to embeddings, perform the similarity search and yeild the top-k matching results quickly.
+
 
 # Conclusion
 
