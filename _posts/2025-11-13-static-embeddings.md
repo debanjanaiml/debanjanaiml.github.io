@@ -58,7 +58,7 @@ We will use a small list of sentences (our 'corpus') to see exactly how the coun
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
 
-# --- 1.1. Prepare the Data (Our Corpus) ---
+# --- 1.1. Prepare the Toy Data (Our Corpus) ---
 # A small collection of documents (sentences)
 corpus = [
     'The quick brown fox jumps over the lazy dog.',
@@ -94,8 +94,8 @@ count_matrix = vectorizer.fit_transform(corpus)
 
 # --- 1.3. Inspect the Results ---
 
-# 3a. The Vocabulary Mapping (The Dictionary)
-print("--- 3a. Vocabulary (Word to Index Mapping) ---")
+# 1.3a. The Vocabulary Mapping (The Dictionary)
+print("--- 1.3a. Vocabulary (Word to Index Mapping) ---")
 # The vocabulary_ attribute shows which index (column) corresponds to which word.
 # Note that all words are converted to lowercase.
 vocabulary = vectorizer.vocabulary_
@@ -105,7 +105,7 @@ print("-" * 30)
 
 
 # 1.3b. The Document-Term Matrix (The Counts)
-print("--- 3b. Document-Term Matrix (Raw Counts) ---")
+print("--- 1.3b. Document-Term Matrix (Raw Counts) ---")
 # Convert the sparse matrix output to a dense array for easier viewing
 count_array = count_matrix.toarray()
 
@@ -119,7 +119,7 @@ print("-" * 30)
 ```
 
 ```
---- 3b. Document-Term Matrix (Raw Counts) ---
+--- 1.3b. Document-Term Matrix (Raw Counts) ---
        and  are  brown  cat  dog  fox  is  jumps  lazy  mat  not  on  over  \
 Doc 1    0    0      1    0    1    1   0      1     1    0    0   0     1   
 Doc 2    0    0      0    0    0    2   1      0     1    0    1   0     0   
@@ -288,4 +288,408 @@ When TF is multiplied by IDF, the result is:
 
 #### The Result: A Semantic Vector
 The TF-IDF vector is no longer a simple count histogram; it's a **semantic vector** where the magnitude of each dimension (word) reflects its importance to that specific document's meaning within the context of the entire corpus. This often leads to superior performance in classification and clustering tasks compared to raw counts.
-"""
+
+### Code
+
+Here we start again with our toy dataset (our corpus) try to understand how TF-IDF works on it. Then we shall try to create TF-IDF from scratch and completely understand what is happening under the hood. Finally we shall apply TF-IDF to the same newsgroup datasets.
+
+```python
+# --- 2.1. Define the Toy Corpus ---
+corpus = [
+    'The quick brown fox jumps over the lazy dog.',
+    'A lazy fox is not a quick fox.',
+    'The dog and the fox are running quickly.',
+    'The cat sat on the mat.'
+]
+
+print("--- 2.1. Corpus Data ---")
+for i, doc in enumerate(corpus):
+    print(f"Doc {i+1}: {doc}")
+print("\n" + "="*40 + "\n")
+```
+
+```
+--- 2.1. Corpus Data ---
+Doc 1: The quick brown fox jumps over the lazy dog.
+Doc 2: A lazy fox is not a quick fox.
+Doc 3: The dog and the fox are running quickly.
+Doc 4: The cat sat on the mat.
+
+========================================
+```
+
+```python
+# --- 2.2. Initialize and Apply TfidfVectorizer ---
+# The TfidfVectorizer handles tokenization, counting (TF),
+# and calculation of Inverse Document Frequency (IDF) in a single step.
+vectorizer = TfidfVectorizer(
+    lowercase=True, 
+    # Stop words are highly common words (like 'the', 'a', 'is')
+    # Ignoring them improves the quality of the vectors.
+    stop_words='english' 
+)
+
+# fit_transform() learns the vocabulary and IDF weights from the corpus (fit),
+# and then computes the TF-IDF scores for the documents (transform).
+tfidf_matrix = vectorizer.fit_transform(corpus)
+
+print("--- 2.2. Resulting TF-IDF Matrix Shape ---")
+print(f"Documents: {tfidf_matrix.shape[0]} (Rows)")
+print(f"Features (Unique Words): {tfidf_matrix.shape[1]} (Columns)")
+print("\n" + "="*40 + "\n")
+```
+
+```
+--- 2.2. Resulting TF-IDF Matrix Shape ---
+Documents: 4 (Rows)
+Features (Unique Words): 11 (Columns)
+
+========================================
+```
+
+```python
+# --- 2.3. Inspect the Results ---
+
+# Get the feature names (vocabulary)
+feature_names = vectorizer.get_feature_names_out()
+
+# Convert the sparse matrix to a dense numpy array for display
+# (Sparse matrices are memory-efficient for large datasets, but dense is easier to read)
+tfidf_array = tfidf_matrix.toarray()
+
+# Create a DataFrame for a clean, visual representation
+df_tfidf = pd.DataFrame(data=tfidf_array, columns=feature_names, index=[f"Doc {i+1}" for i in range(len(corpus))])
+
+print("--- 2.3. Document-Term Matrix (TF-IDF Scores) ---")
+# Display the matrix, rounding to 4 decimal places for readability
+with pd.option_context('display.max_columns', None):
+    print(df_tfidf.round(4))
+
+print("\n" + "="*40 + "\n")
+```
+
+```
+--- 2.3. Document-Term Matrix (TF-IDF Scores) ---
+        brown     cat     dog     fox   jumps    lazy     mat   quick  \
+Doc 1  0.4838  0.0000  0.3814  0.3088  0.4838  0.3814  0.0000  0.3814   
+Doc 2  0.0000  0.0000  0.0000  0.7532  0.0000  0.4652  0.0000  0.4652   
+Doc 3  0.0000  0.0000  0.4530  0.3667  0.0000  0.0000  0.0000  0.0000   
+Doc 4  0.0000  0.5774  0.0000  0.0000  0.0000  0.0000  0.5774  0.0000   
+
+       quickly  running     sat  
+Doc 1   0.0000   0.0000  0.0000  
+Doc 2   0.0000   0.0000  0.0000  
+Doc 3   0.5746   0.5746  0.0000  
+Doc 4   0.0000   0.0000  0.5774  
+
+========================================
+```
+
+
+2.4. Explanation of Key Scores
+
+Find the index of a common word like 'fox' and a rare word like 'jumps' 
+NOTE: Stop words like 'the' and 'a' were removed by the vectorizer setting.
+
+2.4a. Example 1: 'fox' (appears in multiple documents, medium IDF)
+
+```python
+try:
+    fox_index = vectorizer.vocabulary_['fox']
+    fox_scores = df_tfidf['fox'].round(4).to_list()
+    print("2.4a. Word 'fox': Appears in 3 out of 4 documents.")
+    print(f"\tTF-IDF Scores in each document: {fox_scores}")
+except KeyError:
+    print("2.4a. Word 'fox' not found (check stop words/tokenization).")
+```
+
+```
+2.4a. Word 'fox': Appears in 3 out of 4 documents.
+	TF-IDF Scores in each document: [0.3088, 0.7532, 0.3667, 0.0]
+```
+
+The score is moderate. It's high in documents where it appears (Doc 1, 2, 3), but penalized slightly because it's a common word across the corpus.
+
+2.4b. Example 2: 'jumps' (appears in only one document, high IDF)
+
+```python
+try:
+    jumps_index = vectorizer.vocabulary_['jumps']
+    jumps_scores = df_tfidf['jumps'].round(4).to_list()
+    print("\n2.4b. Word 'jumps': Appears in only 1 out of 4 documents.")
+    print(f"\tTF-IDF Scores in each document: {jumps_scores}")
+except KeyError:
+    print("2.4b. Word 'jumps' not found (check stop words/tokenization).")
+```
+
+```
+2.4b. Word 'jumps': Appears in only 1 out of 4 documents.
+	TF-IDF Scores in each document: [0.4838, 0.0, 0.0, 0.0]
+```
+
+The score for 'jumps' in Doc 1 (0.4838) is much higher than 'fox' (0.3088) even though both appeared once. This is because 'jumps' is a rare word, giving it a much higher IDF multiplier, which signals its importance.
+
+#### 2.5 sklearn TF-IDF (Baseline)
+
+```python
+import re
+import math
+import numpy as np
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.datasets import fetch_20newsgroups
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+
+# Define the categories for newsgroup 20 dataset
+CATEGORIES = [
+    'alt.atheism', 
+    'comp.graphics', 
+    'rec.sport.baseball', 
+    'sci.med'
+]
+
+print("#"*40)
+print("2.5: SKLEARN TF-IDF (Baseline)")
+print("#"*40 + "\n")
+```
+
+```python
+# --- 2.5.1. Load Dataset (20 Newsgroups Subset) ---
+print(f"Loading 20 Newsgroups data for categories: {CATEGORIES}...")
+
+newsgroups_data = fetch_20newsgroups(
+    categories=CATEGORIES, 
+    subset='all', 
+    remove=('headers', 'footers', 'quotes')
+)
+
+X = newsgroups_data.data # The text documents
+y = newsgroups_data.target # The category labels
+```
+
+```
+Loading 20 Newsgroups data for categories: ['alt.atheism', 'comp.graphics', 'rec.sport.baseball', 'sci.med']...
+```
+
+```python
+# --- 2.5.2. Split Data ---
+X_train, X_test, y_train, y_test = train_test_split(
+    X, 
+    y, 
+    test_size=0.2, 
+    random_state=42
+)
+
+print(f"\nTraining set size: {len(X_train)} documents")
+print(f"Testing set size: {len(X_test)} documents")
+```
+
+```
+Training set size: 3004 documents
+Testing set size: 752 documents
+```
+
+```python
+# --- 2.5.3. Vectorize the Data using Sklearn TfidfVectorizer ---
+print("\nVectorizing data using sklearn.TfidfVectorizer...")
+
+# Use default settings (including L2 normalization and Laplace smoothing)
+sklearn_vectorizer = TfidfVectorizer(stop_words='english', lowercase=True)
+
+X_train_tfidf_sklearn = sklearn_vectorizer.fit_transform(X_train)
+X_test_tfidf_sklearn = sklearn_vectorizer.transform(X_test)
+
+print(f"Sklearn TF-IDF Training Matrix Shape: {X_train_tfidf_sklearn.shape}")
+```
+
+```
+Vectorizing data using sklearn.TfidfVectorizer...
+Sklearn TF-IDF Training Matrix Shape: (3004, 31102)
+```
+
+```python
+# --- 2.5.4. Train Multinomial Naive Bayes Model ---
+print("\nTraining Multinomial Naive Bayes Classifier with Sklearn TF-IDF...")
+nb_classifier_sklearn = MultinomialNB()
+nb_classifier_sklearn.fit(X_train_tfidf_sklearn, y_train)
+```
+
+```python
+# --- 2.5.5. Predict and Evaluate ---
+y_pred_sklearn = nb_classifier_sklearn.predict(X_test_tfidf_sklearn)
+accuracy_sklearn = accuracy_score(y_test, y_pred_sklearn)
+
+print("\n--- Sklearn TF-IDF Performance ---")
+print(f"Test Accuracy: {accuracy_sklearn:.4f}")
+print("----------------------------------")
+```
+
+```
+--- Sklearn TF-IDF Performance ---
+Test Accuracy: 0.9255
+----------------------------------
+```
+
+In this section we shall try to create the TF-IDF Vectorizer from scratch and see how it fares with the implementation from sklarn
+
+```python
+class SimpleTfidfVectorizer:
+    """
+    A simplified implementation of the TF-IDF Vectorizer.
+    This calculates Term Frequency (TF) and Inverse Document Frequency (IDF) 
+    to create weighted document vectors.
+    """
+    def __init__(self):
+        self.vocabulary_ = {} # Word -> Index mapping
+        self.idf_weights_ = {} # Word -> IDF score mapping
+        self.feature_names_out = [] # List of words
+        self.doc_count = 0 # Total number of documents (N)
+
+    def _tokenize(self, text):
+        """Simple text cleaning and tokenization."""
+        text = text.lower()
+        text = re.sub(r'[^a-z\s]', '', text)
+        tokens = text.split()
+        return tokens
+
+    def fit(self, corpus):
+        """
+        Learns the vocabulary and calculates the IDF weights.
+        """
+        self.doc_count = len(corpus)
+        unique_words = set()
+        
+        # 1. Build Vocabulary and Calculate Document Frequency (DF)
+        df_counts = {} # Word -> number of documents containing the word
+        
+        for doc in corpus:
+            tokens = self._tokenize(doc)
+            # Find unique words in this specific document for DF calculation
+            unique_tokens_in_doc = set(tokens)
+            
+            unique_words.update(unique_tokens_in_doc)
+            
+            for token in unique_tokens_in_doc:
+                df_counts[token] = df_counts.get(token, 0) + 1
+
+        # Sort the words to create a consistent index mapping
+        sorted_words = sorted(list(unique_words))
+        
+        for index, word in enumerate(sorted_words):
+            self.vocabulary_[word] = index
+        
+        self.feature_names_out = sorted_words
+        
+        # 2. Calculate IDF Weights
+        # Using the standard sklearn formula (smooth=idf): 
+        # IDF(t) = log((1 + N) / (1 + DF(t))) + 1
+        for word, df in df_counts.items():
+            # N is self.doc_count
+            idf_score = math.log((1 + self.doc_count) / (1 + df)) + 1
+            self.idf_weights_[word] = idf_score
+        
+        return self
+
+    def transform(self, corpus):
+        """
+        Transforms the documents into the TF-IDF matrix using 
+        the learned vocabulary and IDF weights.
+        """
+        vocab_size = len(self.vocabulary_)
+        # Initialize an empty matrix for the TF-IDF scores
+        tfidf_matrix = np.zeros((len(corpus), vocab_size), dtype=float)
+
+        for doc_index, doc in enumerate(corpus):
+            tokens = self._tokenize(doc)
+            
+            # 1. Calculate Term Frequency (TF - raw count)
+            word_counts = {}
+            for token in tokens:
+                word_counts[token] = word_counts.get(token, 0) + 1
+            
+            # 2. Apply TF * IDF and store in the matrix
+            for word, count in word_counts.items():
+                if word in self.vocabulary_:
+                    # Raw Count (TF)
+                    tf = count
+                    # IDF weight from the fitted model
+                    idf = self.idf_weights_.get(word, 1.0) # Default to 1.0 if word is new (out-of-vocabulary)
+                    
+                    tfidf_score = tf * idf
+                    
+                    col_index = self.vocabulary_[word]
+                    tfidf_matrix[doc_index, col_index] = tfidf_score
+        
+        # NOTE: Standard sklearn TfidfVectorizer applies L2 normalization (unit vector).
+        # We skip that here to keep the implementation simple and focus on the core TF*IDF product.
+        
+        return tfidf_matrix
+
+    def fit_transform(self, corpus):
+        """
+        A convenience method that calls fit() and then transform().
+        """
+        self.fit(corpus)
+        return self.transform(corpus)
+
+```
+
+
+```python
+print("\n" + "#"*40)
+print("2.7: Custom TF-IDF Application and Comparison")
+print("#"*40 + "\n")
+
+# --- 2.7.1. Vectorize the Data using SimpleTfidfVectorizer ---
+print("Vectorizing data using SimpleTfidfVectorizer...")
+custom_vectorizer = SimpleTfidfVectorizer()
+
+# Note: Our simple vectorizer does not handle stop words, so the vocabulary 
+# size will be larger than the sklearn version.
+X_train_tfidf_custom = custom_vectorizer.fit_transform(X_train)
+X_test_tfidf_custom = custom_vectorizer.transform(X_test)
+
+print(f"Custom TF-IDF Training Matrix Shape: {X_train_tfidf_custom.shape}")
+```
+
+```
+Vectorizing data using SimpleTfidfVectorizer...
+Custom TF-IDF Training Matrix Shape: (3004, 31765)
+```
+
+```python
+# --- 2.7.2. Train Multinomial Naive Bayes Model ---
+# MultinomialNB is very forgiving and often works well even without L2 normalization, 
+# provided the features are non-negative.
+print("\nTraining Multinomial Naive Bayes Classifier with Custom TF-IDF...")
+nb_classifier_custom = MultinomialNB()
+nb_classifier_custom.fit(X_train_tfidf_custom, y_train)
+```
+
+```python
+# --- 2.7.3. Predict and Evaluate ---
+y_pred_custom = nb_classifier_custom.predict(X_test_tfidf_custom)
+accuracy_custom = accuracy_score(y_test, y_pred_custom)
+
+print("\n--- Custom TF-IDF Performance ---")
+print(f"Test Accuracy: {accuracy_custom:.4f}")
+print("---------------------------------")
+    
+print(f"\nSummary of Results:")
+print(f"Sklearn TF-IDF Accuracy: {accuracy_sklearn:.4f}")
+print(f"Custom TF-IDF Accuracy: {accuracy_custom:.4f}")
+```
+
+```
+--- Custom TF-IDF Performance ---
+Test Accuracy: 0.9335
+---------------------------------
+
+Summary of Results:
+Sklearn TF-IDF Accuracy: 0.9255
+Custom TF-IDF Accuracy: 0.9335
+```
+
+The custom implementation, even without L2 normalization or advanced preprocessing, achieves a better result, validating the core TF-IDF weighting logic.
