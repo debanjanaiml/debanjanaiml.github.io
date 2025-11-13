@@ -12,7 +12,7 @@ toc_icon: "bookmark"
 
 ### Customer Profiling
 
-<img src="assets/images/portfolio/customer-profiling.png" width="200">
+<img src="https://debanjanaiml.github.io/assets/images/portfolio/customer-profiling.jpg" width="580">{: .align-center}
 
 Complete end to end customer profiling using historic retail sales data and customer demographics to derive insights into various customer behavior patterns using data mining techniques such as unsupervised RFM clustering, and application of various regression and classification tasks, thereby create a holistic customer profile.
 
@@ -22,7 +22,7 @@ Complete end to end customer profiling using historic retail sales data and cust
 
 ### End-to-end MLOps for Speech Emotion Recognition
 
-<img src="assets/images/portfolio/ser_600_474.png" width="200">
+<img src="https://debanjanaiml.github.io/assets/images/portfolio/ser_600_474.jpg" width="380">{: .align-center}
 
 Complete end to end MLOps on GCP using Vertex AI wherein I try to detect the emotions (e.g., happiness, sadness, anger) from the raw audio signals. This project highlights all the stages of a machine learning project starting from data collection, feature engineering, modeling, deployment and monitoring.
 
