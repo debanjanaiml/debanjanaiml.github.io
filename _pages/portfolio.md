@@ -6,27 +6,43 @@ toc_label: "Table of Contents"
 toc_icon: "bookmark"
 
 ---
-*Updated: 08/12/2020*
+*Updated: 13/11/2025*
 
-## Featured
+## 🔥 Featured
 
 ### Customer Profiling
 
-<img src="https://debanjanaiml.github.io/assets/images/portfolio/customer-profiling.jpg" width="580">{: .align-center}
+[![View on GitHub](https://img.shields.io/badge/GitHub-View_on_GitHub-blue?logo=GitHub)](https://github.com/debanjansaha-git/CustomerProfiling)
+[![View on Youtube](https://img.shields.io/badge/YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/WMW35-JUdM8)
+
+
+<img src="https://debanjanaiml.github.io/assets/images/portfolio/customer-profiling.png" width="580">{: .align-center}
 
 Complete end to end customer profiling using historic retail sales data and customer demographics to derive insights into various customer behavior patterns using data mining techniques such as unsupervised RFM clustering, and application of various regression and classification tasks, thereby create a holistic customer profile.
-
-[![View on GitHub](https://img.shields.io/badge/GitHub-View_on_GitHub-blue?logo=GitHub)](https://github.com/debanjansaha-git/CustomerProfiling)
-
 
 
 ### End-to-end MLOps for Speech Emotion Recognition
 
-<img src="https://debanjanaiml.github.io/assets/images/portfolio/ser_600_474.jpg" width="380">{: .align-center}
+[![View on GitHub Repo 1](https://img.shields.io/badge/GitHub-View_on_GitHub-blue?logo=GitHub)](https://github.com/debanjansaha-git/speech-emotion-recognition)
+[![View on GitHub Repo 2](https://img.shields.io/badge/GitHub-View_on_GitHub-blue?logo=GitHub)](https://github.com/akhilkn8/speech-emotion-detection-GCP)
+[![Read Article](https://img.shields.io/badge/GitHub-Read_Article-blue?logo=GitHub)](https://www.mlwithramin.com/project/s24-group-3)
+
+<img src="https://debanjanaiml.github.io/assets/images/portfolio/ser_600_474.png" width="380">{: .align-center}
 
 Complete end to end MLOps on GCP using Vertex AI wherein I try to detect the emotions (e.g., happiness, sadness, anger) from the raw audio signals. This project highlights all the stages of a machine learning project starting from data collection, feature engineering, modeling, deployment and monitoring.
 
-[![View on GitHub](https://img.shields.io/badge/GitHub-View_on_GitHub-blue?logo=GitHub)](https://github.com/debanjansaha-git/speech-emotion-recognition)
+
+## 💬 Large Language Models (LLMs)
+
+### Retreival Augemented Generation (RAG)
+
+[![View on GitHub](https://img.shields.io/badge/GitHub-View_on_GitHub-blue?logo=GitHub)](https://github.com/debanjansaha-git/ltb-rag-chatbot)
+[![View on Youtube](https://img.shields.io/badge/YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/Vavf0isOISY)
+
+<img src="https://debanjanaiml.github.io/assets/images/portfolio/rag_ltb.jpg" width="500">{: .align-center}
+
+
+This AI-driven Legal Aid Chatbot provides real-time legal assistance for the Landlord and Tenant Board of Ontario, utilizing NLP, ML, and Retrieval-Augmented Generation (RAG) pipline to ensure precise and contextually relevant advice. This chatbot platform scrapes the LTB website to create a corpus, applies a custom tokenization and indexing strategy into FAISS; the retrieval component then executes a mixed BM25 (sparse) and FAISS (dense) search, feeds the results through a Cohere reranker, and finally generates a precise legal response via the chatbot interface.
 
 
 ## 🤖 Computer Vision

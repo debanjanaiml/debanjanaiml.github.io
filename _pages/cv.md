@@ -7,7 +7,7 @@ toc_icon: "bookmark"
 ---
 [Download Resume](https://debanjanaiml.github.io/files/20200812-resume.pdf){: .btn .btn--info}
 
-*Updated: 08/12/2020*
+*Updated: 13/11/2025*
 
 ## 📧 Contact
 - Email: [debanjansh@gmail.com]()
