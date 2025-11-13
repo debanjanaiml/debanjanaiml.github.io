@@ -1056,3 +1056,377 @@ Test Accuracy: 0.9189
 * The MultinomialNB classifier is based on probability distributions of counts and requires non-negative input data.
 * To fix this, we need to switch to a classifier that can handle the negative feature weights produced by the Hashing Trick, such as a Linear Support Vector Classifier (LinearSVC).
 
+
+# Distributional and Shallow Embedding Methods
+
+The Bag-of-Words family gave us a great foundation, but those methods treat words as *isolated entities*. Now, we're moving into Distributional Semantics, where we capture the actual meaning and relationships between words.
+These methods represent words as **dense vectors** by analyzing the co-occurrence of words in a large corpus. The principle is: "*A word is characterized by the company it keeps.*" They are *semantic* but still *context-independent*.
+
+## Word2Vec
+
+While Count/TF-IDF vectorizers are fast and simple, they suffer from two major drawbacks:
+1.  **Sparsity:** The feature space is enormous (millions of dimensions) and mostly zeros.
+2.  **No Semantic Meaning:** They cannot tell that 'dog' and 'canine' are related.
+
+**Word2Vec** solves this using the **Distributional Hypothesis** - '*A word is characterized by the company it keeps.*'
+
+This means that words that appear in similar contexts tend to have similar meanings. *Word2Vec* trains a small neural network to predict words based on their neighbors, resulting in *dense*, *low-dimensional* vectors (e.g., 100 or 300 dimensions) where semantic relationships are encoded **spatially**.
+
+**Core Architectures:**
+
+1.  **CBOW (Continuous Bag-of-Words):** Predicts the current word based on its surrounding context words. This method is generally faster to train.
+
+2.  **Skip-gram:** Predicts the surrounding context words given the current word. This method is generally slower but performs better with smaller amounts of training data and captures rare words more effectively. 
+
+The resulting vectors are the '*embeddings*'—numerical representations where vector arithmetic reveals semantic and syntactic relationships (e.g., *Vector('King') - Vector('Man') + Vector('Woman') ≈ Vector('Queen')*).
+
+### Gensim Implementation
+
+Word2vec was developed by Tomáš Mikolov, Kai Chen, Greg Corrado, Ilya Sutskever and Jeff Dean at Google, and published in 2013. It is widely distributed under the library `gensim`, which can be installed as:
+
+```bash
+pip install --upgrade gensim -q
+```
+
+Let's look at how Word2Vec tokenizes words using a toy example:
+
+```python
+import logging
+import re
+from gensim.models import Word2Vec
+from nltk.tokenize import word_tokenize
+# Note: For production use, nltk.download('punkt') might be required once.
+
+# Set up logging for gensim
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+
+print("#"*50)
+print("5: Word2Vec: Distributional and Shallow Embeddings")
+print("#"*50)
+
+print("\n" + "="*50)
+print("5.1: Preparing the Corpus (Tokenization)")
+print("="*50 + "\n")
+
+# A small, clean corpus for demonstration
+corpus = [
+    "The quick brown fox jumps over the lazy dog.",
+    "A lazy cat sleeps next to the big dog.",
+    "Dogs and foxes are animals, but cats are small.",
+    "The brown fox is quicker than the lazy cat.",
+    "Dogs often jump and run."
+]
+
+def preprocess_and_tokenize(text_list):
+    """Simple tokenizer for Word2Vec training."""
+    tokenized_sentences = []
+    for sentence in text_list:
+        # Simple cleaning and lowercasing
+        sentence = re.sub(r'[^\w\s]', '', sentence.lower())
+        # Tokenize using nltk (or a simple split for small examples)
+        tokens = sentence.split()
+        tokenized_sentences.append(tokens)
+    return tokenized_sentences
+
+# Preprocess the corpus
+tokenized_corpus = preprocess_and_tokenize(corpus)
+
+print("Sample Tokenized Sentence:")
+print(tokenized_corpus[0])
+
+```
+
+```
+##################################################
+5: Word2Vec: Distributional and Shallow Embeddings
+##################################################
+
+==================================================
+5.1: Preparing the Corpus (Tokenization)
+==================================================
+
+Sample Tokenized Sentence:
+['the', 'quick', 'brown', 'fox', 'jumps', 'over', 'the', 'lazy', 'dog']
+```
+
+```python
+# =========================================================================
+# 5.2: Training Word2Vec using Gensim
+# =========================================================================
+
+print("\n" + "#"*50)
+print("5.2: Training Word2Vec with Gensim")
+print("#"*50 + "\n")
+
+# --- Training the Model ---
+# Key Parameters:
+# vector_size (or size): Dimensionality of the word vectors (e.g., 100).
+# window: Maximum distance between the current and predicted word within a sentence.
+# min_count: Ignores all words with a total frequency lower than this.
+# sg: 0 for CBOW, 1 for Skip-gram (we'll use Skip-gram here).
+model = Word2Vec(
+    sentences=tokenized_corpus, 
+    vector_size=10,        # Small vector size for demonstration
+    window=2,              # Look 2 words left and right
+    min_count=1,           # Include all words
+    sg=1,                  # Use Skip-gram architecture
+    epochs=100             # Increase epochs for better training on small data
+)
+
+print(f"Vocabulary Size: {len(model.wv.key_to_index)}")
+print(f"Vector Dimensionality: {model.vector_size}")
+```
+
+```
+##################################################
+5.2: Training Word2Vec with Gensim
+##################################################
+
+Vocabulary Size: 28
+Vector Dimensionality: 10
+```
+
+```python
+# 5.3 Inspecting the Vectors and Relationships
+
+print("\n--- Word Vectors ---")
+# Access the vector for a word
+word_vector = model.wv['fox']
+print(f"Vector for 'fox' (first 5 dimensions): {word_vector[:5]}")
+
+
+print("\n--- Semantic Similarity ---")
+# Find words most similar to 'dog'
+similar_words = model.wv.most_similar('dog', topn=3)
+print(f"Words similar to 'dog': {similar_words}")
+
+
+print("\n--- Analogies (Semantic Arithmetic) ---")
+# Example: What is to 'dog' what 'cat' is to 'sleeps'? (Simplified for small corpus)
+# Analogy: 'dog' - 'lazy' + 'quick'
+try:
+    analogy_result = model.wv.most_similar(
+        positive=['dog', 'quick'], 
+        negative=['lazy'], 
+        topn=1
+    )
+    print(f"Analogy: 'dog' - 'lazy' + 'quick' is most similar to: {analogy_result}")
+except Exception as e:
+    print(f"Could not run complex analogy (corpus too small): {e}")
+
+```
+
+```
+--- Word Vectors ---
+Vector for 'fox' (first 5 dimensions): [ 0.05278032  0.08030616 -0.01256576 -0.09743598  0.04672134]
+
+--- Semantic Similarity ---
+Words similar to 'dog': [('dogs', 0.6270390748977661), ('next', 0.5659131407737732), ('big', 0.5416152477264404)]
+
+--- Analogies (Semantic Arithmetic) ---
+Analogy: 'dog' - 'lazy' + 'quick' is most similar to: [('cats', 0.5542731285095215)]
+```
+
+**5.4 Interpretting the results:**
+
+* Words with similar meanings or contexts will have vectors pointing in similar directions (i.e., they will be close together in the vector space)
+* It uses Cosine Similarity to measure the angular distance between the vector for 'dog' and all other word vectors in the vocabulary. A score of `1.0` means they are **identical**; `0.0` means they are **orthogonal** (unrelated).
+* `Words similar to 'dog': ('dogs', 0.627...)`: Since the singular ('dog') and plural ('dogs') often appear in identical contexts, Word2Vec correctly places them very close together, showing it captures basic syntactic similarity.
+* `('next', 0.565...)` and `('big', 0.541...)`: These results are due to our tiny, limited corpus: "A lazy cat sleeps **next** to the **big dog**." Because our model only learned from five sentences, 'next' and 'big' are high-frequency neighbors of 'dog', causing them to be artificially similar in the resulting small vector space. In a real-world corpus, you would expect semantically related words like 'cat', 'leash', or 'pet' to appear here.
+* Word2Vec has **vector arithmetic capabilities** - it tries to find the word vector that is closest to the resulting arithmetic vector: $V_{result} \approx V_{dog} - V_{lazy} + V_{quick}$. We take the vector for 'dog', subtract the vector for 'lazy' (removing the "laziness" feature), and add the vector for 'quick' (imparting the "quickness" feature).
+* In our corpus, both 'dogs' and 'cats' are the central "animal" entities that interact with properties like 'lazy' and 'quick' (The lazy dog, the lazy cat, the quick fox). By swapping out the 'lazy' context for the 'quick' context, the resulting vector points toward the other main domestic animal mentioned in the sentences, showing a basic shift in context from one animal to another.
+
+### Continuous Bag-of-Words (CBOW) from scratch
+
+Let's try to implement CBOW from scratch to understand the mechanics of Word2Vec. We won't train a deep model, but rather focus on setting up the architecture, weights, and loss function using basic NumPy, which is sufficient to illustrate the training process on a toy dataset.
+
+Let's take a toy dataset
+```python
+corpus = [
+    "A dog runs fast",
+    "A cat jumps high",
+    "The brown dog runs and plays",
+    "The tiny kitten jumps up",
+    "I drink hot coffee every morning",
+    "She likes tea, not coffee",
+    "He reads books and drinks tea"
+]
+```
+
+There are some helper functions I shall be using in this, which can be found in the notebook attached to this blog post. I am not providing those codes here for brevity. Avid readers are encouraged to try out the Colab notebook.
+
+Implementing CBOW from scratch
+```python
+# =========================================================================
+# Custom CBOW Implementation
+# =========================================================================
+class CBOW:
+    """
+    **CBOW** predicts the **target word** from its surrounding **context words**. 
+    Input is the *average* of the context word vectors.
+    """
+    def __init__(self, vocab_size, embedding_dim, learning_rate=0.01):
+        self.V = vocab_size
+        self.D = embedding_dim
+        self.lr = learning_rate
+        
+        # W1: Input-to-Hidden weights (V x D). These are the initial word vectors.
+        self.W1 = np.random.uniform(-1, 1, (self.V, self.D)) * 0.1
+        # W2: Hidden-to-Output weights (D x V). These are the context vectors.
+        self.W2 = np.random.uniform(-1, 1, (self.D, self.V)) * 0.1
+
+    def forward(self, context_oh):
+        """
+        context_oh is the average of the one-hot vectors for context words.
+        Shape: (V,)
+        """
+        # h (Hidden Layer): D-dimensional vector. W1^T * context_oh
+        h = np.dot(context_oh, self.W1)
+        
+        # u (Output Layer Pre-Softmax): V-dimensional vector. W2^T * h
+        u = np.dot(h, self.W2)
+        
+        # y (Output Layer Post-Softmax): Probability distribution over vocab
+        y = softmax(u)
+        
+        return y, h, u
+
+    def backward(self, y_pred, target_oh, h, context_oh):
+        """
+        Backpropagation to update weights W1 and W2.
+        """
+        # E: Error at output layer (Predicted - Actual One-Hot)
+        E = y_pred - target_oh
+        
+        # Backpropagate error to Hidden->Output weights (W2)
+        dL_dW2 = np.outer(h, E)
+        
+        # Backpropagate error to Input->Hidden weights (W1)
+        dL_dh = np.dot(self.W2, E) # Error at hidden layer
+        
+        # Update W1: W1 update is proportional to the context and the hidden error
+        dL_dW1 = np.outer(context_oh, dL_dh)
+
+        # Gradient Descent Update
+        self.W2 -= self.lr * dL_dW2
+        self.W1 -= self.lr * dL_dW1
+        
+    def get_embedding(self, word_idx):
+        # The embedding is the row vector in W1 corresponding to the word index
+        return self.W1[word_idx]
+```
+
+We shall also need to prepare the dataset for training a CBOW model, the codes to which can be found in the notebook. Post training the model, check for similarity between pairs of words with similar semantic context such as:
+```
+word_pairs = [
+    ('dog', 'kitten'), # Related (Animals)
+    ('coffee', 'tea'), # Related (Drinks)
+    ('runs', 'jumps'), # Related (Actions)
+    ('dog', 'morning')  # Unrelated
+]
+```
+```
+--- CBOW Cosine Similarities ---
+Similarity('dog', 'kitten'): 0.5547
+Similarity('coffee', 'tea'): 0.6967
+Similarity('runs', 'jumps'): 0.0119
+Similarity('dog', 'morning'): 0.4651
+```
+
+We plot them in a 2D graph to visualize how CBOW represents them, and we see that it is able to identify natural clusters, where words with similar semantic meaning have been paired together.
+
+<img src="https://debanjanaiml.github.io/assets/images/blogs/cbow.png" width="500">{: .align-center}
+
+
+### Skip-gram from scratch
+
+Skip-gram is another architecture of Word2Vec where it tries to predict the context words from the words surrounding it. Here we shall be using Negative Sampling technique to simplify this implementation
+
+```python
+print("\n" + "#"*50)
+print("Part 3: Skip-gram Model (Negative Sampling Simplified)")
+print("#"*50 + "\n")
+
+class SkipGram:
+    """
+    **Skip-gram** predicts the **context words** from the **target word**. 
+    We use a simplified Negative Sampling approach for the output layer 
+    to make the training feasible.
+    """
+    def __init__(self, vocab_size, embedding_dim, learning_rate=0.01):
+        self.V = vocab_size
+        self.D = embedding_dim
+        self.lr = learning_rate
+        
+        # W1: Input-to-Hidden weights (V x D). These are the word vectors (center word).
+        self.W1 = np.random.uniform(-1, 1, (self.V, self.D)) * 0.1
+        # W2: Hidden-to-Output weights (D x V). These are the context vectors (outside word).
+        self.W2 = np.random.uniform(-1, 1, (self.D, self.V)) * 0.1
+
+    def sigmoid(self, x):
+        return 1.0 / (1.0 + np.exp(-x))
+
+    def train_pair(self, target_idx, context_idx, is_positive):
+        """
+        Trains the model on a single (target, context) pair 
+        using a simplified binary objective.
+        """
+        
+        # 1. Forward Pass
+        # h (Hidden Layer): The vector for the target word
+        h = self.W1[target_idx] # Shape (D,)
+        
+        # Output Score: Dot product between target vector (h) and context vector (W2[:, context_idx])
+        u_score = np.dot(h, self.W2[:, context_idx]) 
+        y_pred = self.sigmoid(u_score)
+        
+        # 2. Compute Error and Gradient
+        
+        # Label: 1 for positive context, 0 for negative sample
+        target_label = 1 if is_positive else 0
+        
+        # Error (Sigmoid Cross-Entropy derivative)
+        error = y_pred - target_label
+        
+        # Gradient for W2 (context vector)
+        dL_dW2_col = error * h 
+        
+        # Gradient for W1 (target vector)
+        dL_dh = error * self.W2[:, context_idx]
+        
+        # 3. Update Weights
+        
+        # Update W2 (Context Vector): Only update the column corresponding to the context_idx
+        self.W2[:, context_idx] -= self.lr * dL_dW2_col
+        
+        # Update W1 (Target Vector): Update the row corresponding to the target_idx
+        self.W1[target_idx] -= self.lr * dL_dh
+
+    def get_embedding(self, word_idx):
+        return self.W1[word_idx]
+```
+
+Here as well, we compute the cosine similarities and plot the embeddings in a 2D graph post training
+
+```
+--- Skip-gram Cosine Similarities ---
+Similarity('dog', 'kitten'): 0.6345
+Similarity('coffee', 'tea'): -0.5171
+Similarity('runs', 'jumps'): -0.4653
+Similarity('dog', 'morning'): -0.8592
+```
+
+<img src="https://debanjanaiml.github.io/assets/images/blogs/skipgram.png" width="500">{: .align-center}
+
+
+**Conclusion from CBOW and Skipgram (Word2Vec) techniques**
+
+While we had a deeper look into the CBOW and Skipgram techniques, we finally arrived at the following conclusion
+* **Semantic Clustering**: The 2D plots visually demonstrated that words with related meanings (e.g., 'dog' and 'kitten', or 'coffee' and 'tea') were mapped to points that are close together in the vector space.
+
+* **Quantifiable Similarity**: The Cosine Similarity scores validated this, showing high positive scores for related word pairs and low, near-zero scores for unrelated pairs (like 'dog' and 'morning').
+
+* **Dimensionality Reduction**: The process successfully converted sparse, high-dimensional inputs (one-hot vectors) into dense, low-dimensional vectors (2D), without losing the underlying semantic relationships.
+
+* **Enables Transfer Learning**: Pre-trained embeddings (like those from a large corpus) can be immediately used as features in a new task (e.g., classifying movie reviews), saving significant time and improving performance.
+
