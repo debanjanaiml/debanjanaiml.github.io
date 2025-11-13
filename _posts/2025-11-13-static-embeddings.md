@@ -6,6 +6,7 @@ categories:
 tags:
   - nlp
   - embeddings
+use_math: true
 toc: true
 toc_label: "Table of Contents"
 toc_icon: "bookmark"
