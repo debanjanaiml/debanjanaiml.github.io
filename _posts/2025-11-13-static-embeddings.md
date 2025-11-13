@@ -16,9 +16,9 @@ header:
 ---
 [![Run in Google Colab](https://img.shields.io/badge/Colab-Run_in_Google_Colab-blue?logo=Google&logoColor=FDBA18)](https://colab.research.google.com/drive/19m8uP3Z5TMCtx4gQSzrqD7bOhMg6u5h8)
 
-# A - Introduction
+# Introduction
 
-## Why Do Computers Need Numbers to Understand Words?
+**Why Do Computers Need Numbers to Understand Words?**
 
 **The Core Problem: Language is Qualitative**
 
@@ -26,7 +26,7 @@ Imagine you are building a system to automatically categorize emails as "Spam" o
 
 We cannot feed the raw string "This product is amazing!" directly into a mathematical model. We must first convert the word (or the entire sentence) into a numerical representation — a vector. This process is called **Text Vectorization** or **Embedding**.
 
-## Static vs. Contextual Embeddings
+**Static vs. Contextual Embeddings**
 
 The techniques explored in this article are classified as Static Embeddings:
 
@@ -266,12 +266,12 @@ where:
 * $d$ is the document.
 * $D$ is the corpus (collection of all documents).
 
-### 2.A. Term Frequency (TF)
+**2.A. Term Frequency (TF)**
 The TF part is what we've already done with the Count Vectorizer! It measures 
 how often a word appears in a document. A common formula is:
 $$\text{TF}(t, d) = \text{Raw Count} \text{ of } t \text{ in } d$$
 
-### 2.B. Inverse Document Frequency (IDF)
+**2.B. Inverse Document Frequency (IDF)**
 The IDF part is the '*magic*' that penalizes common words and rewards rare ones. 
 It measures how much information a word provides. If a word appears in *every* document, its IDF score will be close to zero, effectively silencing it.
 
@@ -282,12 +282,12 @@ where:
 * $\text{DF}(t)$ (Document Frequency) is the number of documents in $D$ that contain the term $t$.
 * The final $+1$ ensures that words that appear in all documents still have a positive weight.
 
-### 2.C. The Final Weighting
+**2.C. The Final Weighting**
 When TF is multiplied by IDF, the result is:
 * **High TF-IDF:** Given to a word that appears frequently in a **specific document** (high TF) but rarely in the **entire corpus** (high IDF). These are the words that define the document's topic.
 * **Low TF-IDF:** Given to words like 'the', 'a', or 'is' that are common everywhere.
 
-#### The Result: A Semantic Vector
+**The Result: A Semantic Vector**
 The TF-IDF vector is no longer a simple count histogram; it's a **semantic vector** where the magnitude of each dimension (word) reflects its importance to that specific document's meaning within the context of the entire corpus. This often leads to superior performance in classification and clustering tasks compared to raw counts.
 
 ### Code
@@ -430,7 +430,7 @@ except KeyError:
 
 The score for 'jumps' in Doc 1 (0.4838) is much higher than 'fox' (0.3088) even though both appeared once. This is because 'jumps' is a rare word, giving it a much higher IDF multiplier, which signals its importance.
 
-#### 2.5 sklearn TF-IDF (Baseline)
+**2.5 sklearn TF-IDF (Baseline)**
 
 ```python
 import re
