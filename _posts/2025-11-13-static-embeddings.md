@@ -701,6 +701,8 @@ While TF-IDF tells us which individual words are important, N-grams allow us to 
 
 An N-gram is a sequence of $N$ words. For instance, if $N=2$ (a bigram), we look at sequences like "quick brown" or "lazy dog". If we use an ngram_range of (1, 2), our feature set will include all single words (unigrams) and all two-word phrases (bigrams).
 
+### Code
+
 Let's look at the below Python implementation for understanding how it actually works:
 
 ```python
@@ -895,3 +897,162 @@ Custom TF-IDF + N-grams Accuracy: 0.9242
 ```
 
 The inclusion of bigrams dramatically increases the feature space (vocabulary size) but often captures richer semantic information, potentially boosting classification accuracy, however, in this case, it suffers from the curse of dimensionality and results in a drop in accuracy.
+
+## 4. Hashing Vectorizer
+
+The Hashing Vectorizer, also known as the "**hashing trick**", introduces a critical concept in scalable NLP: feature engineering without an explicit, fixed vocabulary. The **Hashing Vectorizer** provides a highly memory-efficient way to convert text documents into a matrix of token occurrences, similar to Count Vectorization, but without storing a vocabulary dictionary. This is ideal for very large datasets.
+
+**Key Concepts:**
+1.  **Hash Function:** Instead of maintaining a dictionary mapping 'word' -> index, 
+    it uses a mathematical hash function (like `MurmurHash3`) to convert the word 
+    string directly into a numerical feature index.
+2.  **Fixed Feature Size:** You must pre-specify the final size of the feature vector, 
+    often a large power of 2 (e.g., 2**18). This fixes the memory footprint 
+    regardless of the corpus size.
+3.  **Collision Trade-off:** Since the number of unique words is usually far greater 
+    than the fixed feature size, different words can occasionally map to the 
+    same index. This is called a **hash collision**. In practice, the impact of 
+    these collisions is often negligible.
+4.  **Sign Trick:** To help mitigate collisions, a second hash is often used 
+    to determine the sign (+1 or -1) of the resulting count, allowing the 
+    contribution of different words to (partially) cancel out at the same index.
+
+### Code
+
+Let's look at the below Python implementation of simple hashing first to understand how hashing works:
+
+```python
+# =========================================================================
+# Demonstration of the Hashing Concept
+# =========================================================================
+
+def simple_hashing_demonstration(token, n_features=10):
+    """
+    Simulates the core concept of the Hashing Trick: 
+    mapping a string (token) to a fixed-size index using Python's built-in hash.
+    
+    NOTE: sklearn uses a more robust hash (MurmurHash3) and a sign trick.
+    """
+    # 1. Get a numerical hash value for the token
+    hash_value = hash(token)
+    
+    # 2. Map the hash value to a fixed index (0 to n_features-1)
+    # The absolute value handles Python's negative hash results gracefully.
+    index = abs(hash_value) % n_features
+    
+    # 3. Determine the sign (very simplified stand-in for the sign trick)
+    sign = 1 if hash_value >= 0 else -1
+    
+    print(f"Token: '{token}'")
+    print(f"  Hash: {hash_value}")
+    print(f"  Index (0-{n_features-1}): {index}")
+    print(f"  Sign: {sign}")
+    
+    return index, sign
+```
+
+```python
+print("\n" + "="*50)
+print("Part 2: Simple Hashing Demonstration")
+print("="*50 + "\n")
+
+# Example 1: Mapping different tokens
+simple_hashing_demonstration("computer", n_features=10)
+simple_hashing_demonstration("graphics", n_features=10)
+
+# Example 2: Demonstrating a potential collision 
+# (These indices might change across Python sessions/versions, but the concept is clear)
+print("\nChecking for potential collisions:")
+simple_hashing_demonstration("apple", n_features=5)
+simple_hashing_demonstration("banana", n_features=5)
+```
+
+```
+==================================================
+Simple Hashing Demonstration
+==================================================
+
+Token: 'computer'
+  Hash: -6524747023095029386
+  Index (0-9): 6
+  Sign: -1
+Token: 'graphics'
+  Hash: 3457090053383372878
+  Index (0-9): 8
+  Sign: 1
+
+Checking for potential collisions:
+Token: 'apple'
+  Hash: 8988249274639096007
+  Index (0-4): 2
+  Sign: 1
+Token: 'banana'
+  Hash: 8778862295073914582
+  Index (0-4): 2
+  Sign: 1
+(2, 1)
+```
+
+As how hashing works is clear now, let's look at an application using Sklearn HashingVectorizer
+
+```python
+# --- 4.3. Vectorize the Data using Sklearn HashingVectorizer ---
+from sklearn.feature_extraction.text import HashingVectorizer
+print("\nVectorizing data using sklearn.feature_extraction.text.HashingVectorizer...")
+
+# We specify a fixed feature size (2**18 = 262,144 features)
+# The vectorizer automatically handles tokenization, n-grams, and the sign trick.
+# NOTE: HashingVectorizer is often configured for TF-IDF scaling after hashing.
+# We keep it simple for now (equivalent to count vectorization via hashing).
+hashing_vectorizer = HashingVectorizer(
+    n_features=2**18, 
+    stop_words='english', 
+    ngram_range=(1, 2), # Can handle n-grams just like TF-IDF
+    alternate_sign=True # Ensures the use of the sign trick
+)
+
+# Unlike CountVectorizer/TfidfVectorizer, HashingVectorizer does NOT need a 
+# .fit() step, as it builds no vocabulary. It can be transformed immediately.
+X_train_hashed = hashing_vectorizer.transform(X_train)
+X_test_hashed = hashing_vectorizer.transform(X_test)
+
+# Notice the feature size is exactly the n_features we specified.
+print(f"Hashed Training Matrix Shape: {X_train_hashed.shape}") 
+```
+
+```
+Vectorizing data using sklearn.feature_extraction.text.HashingVectorizer...
+Hashed Training Matrix Shape: (3004, 262144)
+```
+
+```python
+# --- 4.4. Train Linear Support Vector Classifier (LinerSVC) ---
+from sklearn.svm import LinearSVC
+print("\nTraining Linear Support Vector Classifier (LinearSVC) with Hashed Features...")
+
+# We must use a classifier that can handle the negative values generated by the Hashing Trick.
+classifier_hashed = LinearSVC(max_iter=1000) 
+classifier_hashed.fit(X_train_hashed, y_train)
+
+# --- 4.5. Predict and Evaluate ---
+y_pred_hashed = classifier_hashed.predict(X_test_hashed)
+accuracy_hashed = accuracy_score(y_test, y_pred_hashed)
+
+print("\n--- Hashing Vectorizer + LinearSVC Performance ---")
+print(f"Test Accuracy: {accuracy_hashed:.4f}")
+print("--------------------------------------------------")
+```
+
+```
+Training Linear Support Vector Classifier (LinearSVC) with Hashed Features...
+
+--- Hashing Vectorizer + LinearSVC Performance ---
+Test Accuracy: 0.9189
+--------------------------------------------------
+```
+
+**Note:**
+* As we are using `HashingVectorizer(..., alternate_sign=True)`: The alternate_sign trick is crucial for collision mitigation, but it produces negative feature values in the output matrix.
+* The MultinomialNB classifier is based on probability distributions of counts and requires non-negative input data.
+* To fix this, we need to switch to a classifier that can handle the negative feature weights produced by the Hashing Trick, such as a Linear Support Vector Classifier (LinearSVC).
+
