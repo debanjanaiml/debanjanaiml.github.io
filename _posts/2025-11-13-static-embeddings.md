@@ -693,3 +693,204 @@ Custom TF-IDF Accuracy: 0.9335
 ```
 
 The custom implementation, even without L2 normalization or advanced preprocessing, achieves a better result, validating the core TF-IDF weighting logic.
+
+## 3. N-grams
+
+While TF-IDF tells us which individual words are important, N-grams allow us to capture the importance of phrases and context, often leading to better classification performance.
+
+An N-gram is a sequence of $N$ words. For instance, if $N=2$ (a bigram), we look at sequences like "quick brown" or "lazy dog". If we use an ngram_range of (1, 2), our feature set will include all single words (unigrams) and all two-word phrases (bigrams).
+
+Let's look at the below Python implementation for understanding how it actually works:
+
+```python
+# Understanding N-Grams (The Core Logic)
+
+def _get_ngrams(tokens, n_min, n_max):
+    """
+    Generates all n-grams (phrases) for a list of tokens within a specified range.
+    
+    Example: 
+    Tokens = ['the', 'quick', 'brown']
+    If n_min=1, n_max=2:
+    Result = ['the', 'quick', 'brown', 'the_quick', 'quick_brown']
+    """
+    ngrams = []
+    # Loop from the minimum N to the maximum N (inclusive)
+    for n in range(n_min, n_max + 1):
+        # The range ensures we stop before the index goes out of bounds
+        for i in range(len(tokens) - n + 1):
+            # Join the words with an underscore to treat the phrase as a single feature
+            ngrams.append('_'.join(tokens[i:i+n]))
+    return ngrams
+```
+
+```python
+print("\n" + "="*40)
+print("3: Understanding N-Grams Demonstration")
+print("="*40 + "\n")
+
+sample_tokens = ['this', 'is', 'a', 'short', 'sentence']
+print(f"Sample Tokens: {sample_tokens}")
+
+# Demonstrate Unigrams (1-grams)
+unigrams = _get_ngrams(sample_tokens, 1, 1)
+print(f"Unigrams (1-grams): {unigrams}")
+
+# Demonstrate Bigrams (2-grams)
+bigrams = _get_ngrams(sample_tokens, 2, 2)
+print(f"Bigrams (2-grams): {bigrams}")
+
+# Demonstrate Mixed (1-gram and 2-gram)
+mixed_ngrams = _get_ngrams(sample_tokens, 1, 2)
+print(f"Mixed N-grams (1-2): {mixed_ngrams}\n")
+```
+
+```
+========================================
+3: Understanding N-Grams Demonstration
+========================================
+
+Sample Tokens: ['this', 'is', 'a', 'short', 'sentence']
+Unigrams (1-grams): ['this', 'is', 'a', 'short', 'sentence']
+Bigrams (2-grams): ['this_is', 'is_a', 'a_short', 'short_sentence']
+Mixed N-grams (1-2): ['this', 'is', 'a', 'short', 'sentence', 'this_is', 'is_a', 'a_short', 'short_sentence']
+```
+
+`sklearn` already provides support ngram into `TfidfVectorizer` by simply setting `ngram_range=(1, 2)` to include **unigrams** (single words) and **bigrams** (two-word phrases) in the feature set.
+
+In order to apply TFIDF with ngram we can use something like:
+```python
+print("\nVectorizing data using sklearn.TfidfVectorizer with ngrams...")
+
+sklearn_vectorizer = TfidfVectorizer(
+    stop_words='english', 
+    lowercase=True,
+    ngram_range=(1, 2) 
+)
+
+X_train_tfidf_ng_sklearn = sklearn_vectorizer.fit_transform(X_train)
+X_test_tfidf_ng_sklearn = sklearn_vectorizer.transform(X_test)
+
+print(f"Sklearn TF-IDF Training Matrix Shape: {X_train_tfidf_ng_sklearn.shape}")
+```
+
+```
+Vectorizing data using sklearn.TfidfVectorizer with ngrams...
+Sklearn TF-IDF Training Matrix Shape: (3004, 236326)
+```
+
+Note: Because we included n-gram range 1 to 2, which includes both unigrams and bigrams, our feature set has exploded.
+
+We can then train the Multinomial NB classifier with this dataset as
+```python
+# --- 3.4. Train Multinomial Naive Bayes Model ---
+print("\nTraining Multinomial Naive Bayes Classifier with Sklearn TF-IDF...")
+nb_classifier_sklearn = MultinomialNB()
+nb_classifier_sklearn.fit(X_train_tfidf_ng_sklearn, y_train)
+
+# --- 3.5. Predict and Evaluate ---
+y_pred_sklearn = nb_classifier_sklearn.predict(X_test_tfidf_ng_sklearn)
+accuracy_sklearn = accuracy_score(y_test, y_pred_sklearn)
+
+print("\n--- Sklearn TF-IDF + N-grams Performance ---")
+print(f"Test Accuracy: {accuracy_sklearn:.4f}")
+print("---------------------------------------------")
+```
+
+```
+Training Multinomial Naive Bayes Classifier with Sklearn TF-IDF...
+
+--- Sklearn TF-IDF + N-grams Performance ---
+Test Accuracy: 0.9242
+---------------------------------------------
+```
+
+And in-order to include ngrams into our custom TFIDF implementation we simply add the function and use it in our tokenization as:
+
+```python
+class SimpleTfidfNgramsVectorizer:
+    ...
+    def _get_ngrams(self, tokens, n_min, n_max):
+        """Generates n-grams (phrases) for a list of tokens."""
+        ngrams = []
+        for n in range(n_min, n_max + 1):
+            # The range ensures we stop before the index goes out of bounds
+            for i in range(len(tokens) - n + 1):
+                # Join the words with an underscore to treat the phrase as a single feature
+                ngrams.append('_'.join(tokens[i:i+n]))
+        return ngrams
+
+    def _tokenize(self, text):
+        """
+        Simple text cleaning, tokenization, and N-gram generation.
+        NOTE: This simple tokenizer does not remove stop words, 
+        which will lead to many common bigrams (e.g., 'the_quick').
+        """
+        text = text.lower()
+        # Remove all non-alphanumeric characters except spaces
+        text = re.sub(r'[^a-z\s]', '', text)
+        # Split into unigrams
+        tokens = text.split()
+        
+        # Generate N-grams based on the set range
+        return self._get_ngrams(tokens, self.ngram_range[0], self.ngram_range[1])
+    
+    # rest of the functions remains the same
+```
+
+```python
+print("\n" + "#"*40)
+print("Part 3: Custom TF-IDF + N-grams Application and Comparison")
+print("#"*40 + "\n")
+
+# --- 3.6. Vectorize the Data using SimpleTfidfNgramsVectorizer ---
+print("Vectorizing data using SimpleTfidfNgramsVectorizer...")
+# CRITICAL CHANGE: Initialize with bigrams
+custom_vectorizer = SimpleTfidfNgramsVectorizer(ngram_range=(1, 2)) 
+
+X_train_tfidf_ng_custom = custom_vectorizer.fit_transform(X_train)
+X_test_tfidf_ng_custom = custom_vectorizer.transform(X_test)
+
+print(f"Custom TF-IDF + N-grams Training Matrix Shape: {X_train_tfidf_ng_custom.shape}")
+```
+
+```
+########################################
+Part 3: Custom TF-IDF + N-grams Application and Comparison
+########################################
+
+Vectorizing data using SimpleTfidfNgramsVectorizer...
+Custom TF-IDF + N-grams Training Matrix Shape: (3004, 257636)
+```
+
+```python
+# --- 3.7. Train Multinomial Naive Bayes Model ---
+print("\nTraining Multinomial Naive Bayes Classifier with Custom TF-IDF...")
+nb_classifier_custom = MultinomialNB()
+nb_classifier_custom.fit(X_train_tfidf_ng_custom, y_train)
+
+# --- 3.8. Predict and Evaluate ---
+y_pred_custom = nb_classifier_custom.predict(X_test_tfidf_ng_custom)
+accuracy_custom = accuracy_score(y_test, y_pred_custom)
+
+print("\n--- Custom TF-IDF + N-grams Performance ---")
+print(f"Test Accuracy: {accuracy_custom:.4f}")
+print("-------------------------------------------")
+print(f"\nSummary of Results:")
+print(f"Sklearn TF-IDF + N-grams Accuracy: {accuracy_sklearn:.4f}")
+print(f"Custom TF-IDF + N-grams Accuracy: {accuracy_custom:.4f}")
+```
+
+```
+Training Multinomial Naive Bayes Classifier with Custom TF-IDF...
+
+--- Custom TF-IDF + N-grams Performance ---
+Test Accuracy: 0.9242
+-------------------------------------------
+
+Summary of Results:
+Sklearn TF-IDF + N-grams Accuracy: 0.9242
+Custom TF-IDF + N-grams Accuracy: 0.9242
+```
+
+The inclusion of bigrams dramatically increases the feature space (vocabulary size) but often captures richer semantic information, potentially boosting classification accuracy, however, in this case, it suffers from the curse of dimensionality and results in a drop in accuracy.
