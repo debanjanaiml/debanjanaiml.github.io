@@ -12,7 +12,7 @@ toc_label: "Table of Contents"
 toc_icon: "bookmark"
 excerpt: "`Embeddings` are the foundations of advanced NLP, where texts are converted into numeric vectors, and various ML techniques are applied on them. Static embedding techniques serves as the foundation for understanding how words in a sentence can be used to derive semantic understanding"
 header:
-  teaser: "/assets/images/portfolio/finetuning-bert.png"
+  teaser: "/assets/images/blogs/static_embeddings.png"
 ---
 [![Run in Google Colab](https://img.shields.io/badge/Colab-Run_in_Google_Colab-blue?logo=Google&logoColor=FDBA18)](https://colab.research.google.com/drive/19m8uP3Z5TMCtx4gQSzrqD7bOhMg6u5h8)
 
@@ -1430,3 +1430,247 @@ While we had a deeper look into the CBOW and Skipgram techniques, we finally arr
 
 * **Enables Transfer Learning**: Pre-trained embeddings (like those from a large corpus) can be immediately used as features in a new task (e.g., classifying movie reviews), saving significant time and improving performance.
 
+
+## GloVe (Global Vectors for Word Representation)
+
+GloVe, developed at Stanford, is neither a purely count-based method (like TF-IDF) nor a purely predictive neural network method (like Word2Vec). It's a **count-based model with an optimization objective** that combines the efficiency of count statistics with the semantic encoding of distributed representations.
+
+The core idea is: **Instead of predicting the next word, GloVe tries to predict the logarithm of the co-occurrence probability.**
+
+**The Co-occurrence Matrix (X)**
+
+GloVe starts by generating a massive **Word-Word Co-occurrence Matrix (X)**. 
+
+* **Rows/Columns:** Each word in the vocabulary.
+* **Entry $X_{ij}$:** The number of times word $i$ and word $j$ appear together within a specified window size in the entire corpus.
+
+**The GloVe Objective Function**
+
+GloVe trains vectors ($w_i$ and $\tilde{w}_j$) by minimizing this weighted least-squares objective function:
+
+$$
+J = \sum_{i=1}^{V} \sum_{j=1}^{V} f(X_{ij}) (w_i^T \tilde{w}_j + b_i + \tilde{b}_j - \log X_{ij})^2
+$$
+
+Where:
+* $w_i$ and $\tilde{w}_j$ are the word vectors and context word vectors.
+* $b_i$ and $\tilde{b}_j$ are bias terms.
+* $X_{ij}$ is the co-occurrence count.
+* $f(X_{ij})$ is a **weighting function** that gives less importance to very rare (low count) and very frequent (high count) co-occurrences.
+
+### **Generating the Co-occurrence Matrix**
+
+Let's generate the input data structure for GloVe (the Co-occurrence Matrix) using our toy corpus.
+
+```python
+# --- GloVe Data Generator ---
+def build_co_occurrence_matrix(tokens, word_to_idx, vocab_size, window_size=1):
+    """
+    Builds the word-word co-occurrence matrix X.
+    This matrix is the primary input for the GloVe model training.
+    """
+    X = np.zeros((vocab_size, vocab_size), dtype=np.int32)
+    
+    for i, center_word in enumerate(tokens):
+        center_idx = word_to_idx[center_word]
+        
+        # Define context boundaries
+        start = max(0, i - window_size)
+        end = min(len(tokens), i + window_size + 1)
+        
+        for j in range(start, end):
+            if i != j:
+                context_word = tokens[j]
+                context_idx = word_to_idx[context_word]
+                
+                # Increment the co-occurrence count
+                # X[i, j] is the number of times word i is found near word j
+                X[center_idx, context_idx] += 1
+                
+    return X
+```
+
+```python
+# --- Run GloVe Data Generation Example ---
+tokens, vocab, word_to_idx, idx_to_word = preprocess_and_build_vocab(corpus)
+VOCAB_SIZE = len(vocab)
+WINDOW_SIZE = 2
+
+X = build_co_occurrence_matrix(tokens, word_to_idx, VOCAB_SIZE, window_size=WINDOW_SIZE)
+
+print(f"Vocabulary Size (V): {VOCAB_SIZE}")
+print(f"Co-occurrence Matrix Shape (V x V): {X.shape}")
+
+# Print a small section of the matrix for inspection
+# We'll select indices for 'dog' and 'cat' to see their relationship
+words_to_check = ['dog', 'cat', 'runs', 'jumps']
+indices_to_check = [word_to_idx[w] for w in words_to_check if w in word_to_idx]
+
+if indices_to_check:
+    print("\n--- Example Co-occurrence Matrix Entries ---")
+    print(f"Words: {words_to_check}")
+    
+    # Create a small sub-matrix for display
+    sub_matrix = X[np.ix_(indices_to_check, indices_to_check)]
+    
+    df_x = pd.DataFrame(
+        sub_matrix, 
+        index=[f"Center: {w}" for w in words_to_check], 
+        columns=[f"Context: {w}" for w in words_to_check]
+    )
+    print(df_x)
+```
+
+```
+Vocabulary Size (V): 28
+Co-occurrence Matrix Shape (V x V): (28, 28)
+
+--- Example Co-occurrence Matrix Entries ---
+Words: ['dog', 'cat', 'runs', 'jumps']
+               Context: dog  Context: cat  Context: runs  Context: jumps
+Center: dog               0             0              2               0
+Center: cat               0             0              0               1
+Center: runs              2             0              0               0
+Center: jumps             0             1              0               0
+```
+
+The GloVe methodology is a powerful fusion of count-based and predictive methods:
+
+* **Global Context:** Unlike Word2Vec, which only sees local windows, GloVe uses the entire, comprehensive co-occurrence matrix.
+* **Dimensionality Reduction:** The final embedding vectors are derived by mathematically factoring (decomposing) this matrix.
+* **Increased Stability:** Factoring global statistics often leads to more stable and faster training convergence than relying on stochastic gradient descent (SGD) on local samples (Word2Vec).
+
+
+## FastText: The Power of Sub-word Information
+
+FastText (developed by Facebook's AI Research lab) is an extension of the Word2Vec model, but with one critical difference: **it represents a word as a bag of character n-grams (sub-words).**
+
+**Why Sub-word Embeddings?**
+
+1.  **Handling Out-of-Vocabulary (OOV) Words:** If a word like "unbelievable" was not in the training vocabulary, Word2Vec/GloVe cannot generate a vector for it. FastText, however, can calculate a vector for "unbelievable" by averaging the vectors of its constituent character n-grams (e.g., `<unb`, `nbe`, `bel`, ..., `ble>`, `ble`).
+2.  **Morphology/Relatedness:** It naturally captures morphological similarities. "running" and "runs" share the sub-word `run`, so their vectors will be inherently closer than two completely unrelated words.
+3.  **Better Embeddings for Rare Words:** Rare words often have insufficient data to train a stable Word2Vec vector, but they still share sub-words with common words, giving them a more robust embedding.
+
+**Training FastText**
+
+We will train a FastText model on our toy corpus and demonstrate its ability to guess the vector for a word it has *never* seen.
+
+```python
+# A larger, illustrative corpus for demonstration (clear semantic groups)
+# This corpus contains the root 'run' but not the plural 'runs' (which we will test as OOV)
+corpus_sentences = [
+    "A dog runs fast",
+    "A cat jumps high",
+    "The brown dog quickly moves and plays",
+    "The tiny kitten jumps up",
+    "I drink hot coffee every morning",
+    "She likes tea, not coffee",
+    "He reads books and drinks tea",
+    "The runner has a marathon", # Contains 'run' as sub-word
+    "We need to speed up the process" # Contains 'speed'
+]
+
+# Gensim utility function to preprocess (tokenize, lowercase) the sentences
+tokenized_corpus = [simple_preprocess(sentence) for sentence in corpus_sentences]
+
+print(f"Tokenized Corpus Example (First sentence): {tokenized_corpus[0]}")
+print(f"Total tokens for training: {sum(len(s) for s in tokenized_corpus)}")
+```
+
+```
+Tokenized Corpus Example (First sentence): ['dog', 'runs', 'fast']
+Total tokens for training: 45
+```
+
+```python
+# --- Train FastText Model ---
+
+# We use a small vector size and short character n-gram range for demonstration.
+# min_n=3, max_n=6: FastText will consider character sequences from 3 to 6 characters long.
+EMBEDDING_DIM = 10
+MIN_N = 3
+MAX_N = 6
+
+model_fasttext = FastText(
+    tokenized_corpus, 
+    vector_size=EMBEDDING_DIM, 
+    window=4, 
+    min_count=1, 
+    min_n=MIN_N, 
+    max_n=MAX_N, 
+    epochs=100
+)
+
+print(f"\nModel trained with character n-gram range: ({MIN_N}, {MAX_N})")
+```
+
+```python
+# --- FastText Results: OOV and Similarity ---
+
+# 7.1. Similarity for known words (e.g., 'coffee' vs 'tea')
+similarity_known = model_fasttext.wv.similarity('coffee', 'tea')
+print(f"\n7.1. Similarity for known words ('coffee', 'tea'): {similarity_known:.4f}")
+```
+
+```
+7.1. Similarity for known words ('coffee', 'tea'): 0.1100
+```
+
+```python
+# 2. Testing OOV Handling (The main feature!)
+# We will test a word that did NOT appear in the corpus: 'running'
+
+OOV_WORD = 'running'
+KNOWN_RELATED_WORD = 'runner'
+
+# Check if OOV_WORD is actually in the vocabulary (it should not be if min_count=1)
+if OOV_WORD not in model_fasttext.wv.key_to_index:
+    print(f"\n7.2. Testing OOV: The word '{OOV_WORD}' is NOT in the vocabulary, but its vector can still be generated.")
+    
+    # Get the vector for the OOV word
+    oov_vector = model_fasttext.wv[OOV_WORD]
+    print(f"   Vector for OOV word '{OOV_WORD}' (first 5 dims): {oov_vector[:5]}")
+
+    # Check the similarity between the OOV word and a known related word
+    similarity_oov = model_fasttext.wv.similarity(OOV_WORD, KNOWN_RELATED_WORD)
+    print(f"   Similarity('{OOV_WORD}', '{KNOWN_RELATED_WORD}'): {similarity_oov:.4f}")
+    
+    # Check the similarity between the OOV word and an unrelated word
+    similarity_unrelated = model_fasttext.wv.similarity(OOV_WORD, 'morning')
+    print(f"   Similarity('{OOV_WORD}', 'morning'): {similarity_unrelated:.4f}")
+```
+
+```
+7.2. Testing OOV: The word 'running' is NOT in the vocabulary, but its vector can still be generated.
+   Vector for OOV word 'running' (first 5 dims): [-0.00965883 -0.00111312  0.01884038  0.01726348 -0.00672889]
+   Similarity('running', 'runner'): 0.4531
+   Similarity('running', 'morning'): 0.0951
+```
+
+```python
+# 7.3. Finding nearest neighbors for the OOV word
+print(f"\n7.3. Nearest neighbors for the OOV word '{OOV_WORD}':")
+# This demonstrates that the vector for 'running' is meaningful and relates to other 'motion' words
+neighbors = model_fasttext.wv.most_similar(OOV_WORD, topn=3)
+for word, sim in neighbors:
+    print(f"   - {word} (Similarity: {sim:.4f})")
+```
+
+```
+7.3. Nearest neighbors for the OOV word 'running':
+   - she (Similarity: 0.5078)
+   - need (Similarity: 0.4691)
+   - runner (Similarity: 0.4531)
+```
+
+FastText solves the limitations of Word2Vec and GloVe by incorporating sub-word information. 
+The key takeaway is its ability to **generate a vector for any word, regardless of whether it was seen during training**, provided it is composed of known character n-grams. This makes it highly robust for datasets with specialized terminology, misspellings, or highly inflected languages.
+
+
+# Conclusion
+
+We've covered the full evolution of static embeddings! We started with simple Counts and TF-IDF, learned how to scale up with the Hashing Trick, and then made the jump to dense semantic representations with Word2Vec and GloVe. Finally, we saw how FastText makes these models robust by understanding sub-words.
+
+These methods are the backbone of classical NLP. Now that you understand how they capture meaning, you're ready for the modern era of contextual models!
+
+If you found this series useful, please consider giving it a like, sharing it with a friend, and subscribing for more deep dives into machine learning! Happy coding!
