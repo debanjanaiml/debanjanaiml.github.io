@@ -15,10 +15,16 @@ header:
   teaser: "/assets/images/blogs/static_embeddings.png"
 ---
 
+[![View GitHub Repo](https://img.shields.io/badge/GitHub-View_on_GitHub-blue?logo=GitHub)](https://github.com/karpathy/nanoGPT)
+[![Watch NanoGPT in Youtube](https://img.shields.io/badge/YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/kCc8FmEb1nY)
+
+
 # Introduction
 
 If you have applied for a Data Scientist or Machine Learning Engineer recently, you have probably been asked atleast once to explain the Transformer architecture. While Andrej Karpathy has done a great job breaking down the entire model from scratch, however, there are certain nuances to it, which is not so obvious for someone who is not familiar with the intricacies and *math-dance* involved in it.
 The primary goal of this article is to provide deep comprehension - to understand exactly what every line of code does, why it is necessary for the Transformer architecture, and how the tensor shapes evolve through the forward and backward passes. This detailed analysis will transform the seemingly complex structure of a modern Large Language Model (LLM) into a sequence of clear, manageable operations, providing a solid foundation for anyone looking to build, modify, or debug these powerful models. Without much-ado let's get started.
+
+NOTE: Before proceeding any further, if you have not yet watched the [NanoGPT video](https://youtu.be/kCc8FmEb1nY) by A[ndrej Karpathy](https://karpathy.ai/), please watch the video first, then come back to this article for the explanation.
 
 # 📂 Organisation: The NanoGPT Structure
 
@@ -907,9 +913,9 @@ transposed = [...] ...
 ```
 **Weight Alignment and Transposition**: Filters keys and handles the `Conv1D` vs. `Linear` mismatch.
 
-Official OpenAI weights use a PyTorch implementation of `Conv1D` which stores weights in $(\mathbf{C}_{\text{out}}, \mathbf{C}_{\text{in}})$. 
+Official OpenAI weights use a PyTorch implementation of `Conv1D` which stores weights in $(\mathbf{C}_{\text{out}}, \mathbf{C}_{\text{in}})$ . 
 
-NanoGPT uses standard nn.Linear, which expects $(\mathbf{C}_{\text{in}}, \mathbf{C}_{\text{out}})$. These weights must be transposed (`.t()`) during transfer.
+NanoGPT uses standard nn.Linear, which expects $(\mathbf{C}_{\text{in}}, \mathbf{C}_{\text{out}})$ . These weights must be transposed (`.t()`) during transfer.
 
 ```python
 def configure_optimizers(...)
@@ -1089,7 +1095,7 @@ gradient_accumulation_steps //= ddp_world_size
 
 The Global Effective Batch Size is now distributed: each GPU handles $1/\mathbf{W}$ of the total gradient accumulation work. This maintains the desired global batch size ($B_{global}$).
 
-$\mathbf{A}_{\text{new}} = \mathbf{A}_{\text{target}} / \mathbf{W}$
+$$\mathbf{A}_{\text{new}} = \mathbf{A}_{\text{target}} / \mathbf{W}$$
 
 
 ```python
@@ -1108,7 +1114,7 @@ tokens_per_iter = gradient_accumulation_steps * ddp_world_size * batch_size * bl
 
 This confirms the effective global batch size, which is a key metric in LLM training.
 
-$\mathbf{B}_{global} = \mathbf{A} \times \mathbf{W} \times \mathbf{B}_{micro} \times \mathbf{T}$
+$$\mathbf{B}_{global} = \mathbf{A} \times \mathbf{W} \times \mathbf{B}_{micro} \times \mathbf{T}$$
 
 ```python
 print(f"tokens per iteration will be: {tokens_per_iter:,}")
@@ -1128,7 +1134,8 @@ The goal is to achieve a **target Global Effective Batch Size** of $B_{global} =
   * $\mathbf{B}_{micro} = 12$ (Batch size per GPU)
   * $\mathbf{T} = 1024$ (Block size)
 * **Post-DDP Scaling:**
-  * The script performs: $\mathbf{A}_{\text{new}} = \mathbf{A}_{\text{target}} / \mathbf{W} = 40 / 8 = 5$.
+  * The script performs: 
+  $$\mathbf{A}_{\text{new}} = \mathbf{A}_{\text{target}} / \mathbf{W} = 40 / 8 = 5$$
   * **Final Global Calculation:**
 
 $$B_{global} = \mathbf{A}_{\text{new}} \times \mathbf{W} \times \mathbf{B}_{micro} \times \mathbf{T} = 5 \times 8 \times 12 \times 1024 = 491,520 \text{ tokens}$$ 
