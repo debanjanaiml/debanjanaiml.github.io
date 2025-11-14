@@ -925,3 +925,737 @@ def estimate_mfu(...)
 
 A common metric in LLM research to gauge hardware and software efficiency, normalizing training speed across different systems.
 
+
+# The Training Script Setup (`train.py`)
+
+Introductory Comment Block:
+
+Explains the three main ways to launch the script: single GPU (debug), multi-GPU on one node (DDP/standalone), and multi-GPU across multiple nodes (DDP/multi-node).
+
+Provides essential instructions for running the code efficiently across different hardware setups.
+
+Introduces Distributed Data Parallel (DDP), the standard for scaling PyTorch training.
+
+
+```python
+torchrun --standalone --nproc_per_node=4 train.py
+```
+Command for DDP on a single machine.
+
+* `--standalone`: means the master process is automatically elected. 
+* `--nproc_per_node=4`: launches 4 worker processes (one per GPU).
+
+```python
+torchrun --nnodes=2 --node_rank=0 ...
+```
+Command for multi-node DDP.	
+
+Requires explicit setting of the number of nodes (`--nnodes`), the rank of the current node (`--node_rank`), and the master process IP/port.
+
+This is complex but necessary for cluster training.
+
+**Default Hyperparameters**
+
+This block defines the base configuration, which is then overridden by command-line arguments or config files (like `config/train_gpt2.py`).
+
+|Section | Key Parameter| Value| What it controls & Why it matters |
+|--------|--------------|------|-----------------------------------|
+| **I/O** | `out_dir` | `out` | Where model checkpoints and logs are saved. |
+| | `eval_interval` | `2000` | How often (in training steps) to run validation. |
+| | `init_from` | `scratch` | Determines if training starts from random weights, resumes a checkpoint, or loads a pre-trained model. |
+| **Data** | `gradient_accumulation_steps` | `5 * 8 = 40` | **Effective Batch Size Multiplier**. Multiplies the number of tokens processed before a weight update. |
+| | `batch_size` |  `12` | **Micro Batch Size**. The number of sequences processed per GPU. ($\mathbf{B}_{micro}$). |
+| | `block_size` | `1024` | **Sequence Length**. The maximum length of $\mathbf{T}$ (Context Length). |
+| **Model** | `n_layer`, `n_head`, `n_embd` | `12`, `12`, `768` | Defines the model size (GPT-2 Small / 124M parameters). | 
+| | `bias` | `False` | Disables bias in LayerNorm and Linear layers (a choice sometimes made for better generalization). Note: The config file we analyzed earlier (`train_gpt2.py`) overrides this to `True`. |
+| **Optimizer** | `learning_rate` | `6e-4` | The peak learning rate. Crucial for training stability. |
+| | `max_iters` | `600000` | The total number of parameter update steps. |
+| | `weight_decay` | `1e-1` | $\text{L}_2$ regularization applied to weights. | 
+| **LR Decay** | `decay_lr` | `True` | Standard practice in LLM training to gradually reduce the LR to fine-tune the minimum loss. |
+| | `warmup_iters` | `2000` | Initial steps where LR gradually increases to `learning_rate` to prevent large gradient swings early on. |
+| `System` | `device` | `cuda` | Target device. |
+| | `dtype` | `bfloat16` or `float16` | The precision used for training. $\text{bfloat16}$ is preferred when available for better range, crucial for large models. |
+| | `compile` | `True` | PyTorch 2.0 optimization to compile the model graph for speed. |
+
+## Configuration Execution
+
+```python
+onfig_keys = [k for k,v in globals().items() if not k.startswith('_') ...]
+```
+Collects all defined configuration variables.
+
+Creates a list of keys that represent hyperparameters.
+
+```python
+exec(open('configurator.py').read())
+```
+Executes a helper script (configurator.py).	
+
+This script is responsible for parsing command line arguments and loading parameters from configuration files, overriding the defaults defined above.
+
+This is how external settings (like `config/train_gpt2.py`) are loaded.
+
+```python
+config = {k: globals()[k] for k in config_keys}
+```
+Creates a final dictionary of all active configuration settings.
+
+This final dictionary is usually logged to W&B and ensures all parts of the script use the same, correct settings.
+
+## Distributed Training Setup (DDP)
+
+This code block determines if the script is running in a distributed environment, initializes the communication backend, assigns resources, and adjusts the batch size for parallel training.
+
+```python
+ddp = int(os.environ.get('RANK', -1)) != -1
+```
+**DDP Check**: Checks if the environment variable `RANK` is set.
+
+The `torchrun` launch utility (or equivalent DDP starter) automatically sets environment variables like `RANK`, `LOCAL_RANK`, and `WORLD_SIZE`. If `RANK` is present, it's a DDP run.
+
+`RANK` is the global rank of the process (0 to $N-1$).
+
+```python
+init_process_group(backend=backend)
+```
+Initializes the PyTorch distributed process group.	
+
+Sets up the communication backend (e.g., NCCL on GPUs) so processes can synchronize gradients.	
+
+`backend` is usually '`nccl`' for CUDA.
+
+```python
+ddp_rank = int(os.environ['RANK'])
+```
+Gets the local rank on the machine (0 to $G-1$).
+
+Used to assign the correct physical GPU to the current process on the node.
+
+Local Rank: $\mathbf{r}_{\text{local}} \in [0, \mathbf{G}-1]$
+
+```python
+ddp_world_size = int(os.environ['WORLD_SIZE'])
+```
+Gets the total number of processes/GPUs across all nodes.
+
+Used to calculate the full effective batch size and scale down accumulation steps.
+
+World Size: $\mathbf{W}$
+
+```python
+device = f'cuda:{ddp_local_rank}'
+```
+Sets the device string based on the local rank.	
+
+Ensures each process is bound to its unique physical GPU.	
+
+Example: `cuda:0`, `cuda:1`, etc.
+
+```python
+torch.cuda.set_device(device)
+```
+Binds the current PyTorch process to the specified CUDA device.	
+
+Crucial for correct memory allocation and tensor placement.
+
+```python
+master_process = ddp_rank == 0
+```
+Determines if the current process is the designated master.
+
+Only the master process performs I/O operations like saving checkpoints, printing logs, and logging to services like W&B.
+
+$\mathbf{r} = 0$
+
+
+```python
+seed_offset = ddp_rank
+```
+Assigns a unique seed offset for each process.	
+
+Ensures each DDP worker (GPU) samples a slightly different batch order, improving data diversity and overall model convergence.
+
+```python
+assert gradient_accumulation_steps % ddp_world_size == 0
+```
+Sanity check.	
+
+Ensures the total target accumulation is divisible by the number of GPUs.
+
+```python
+gradient_accumulation_steps //= ddp_world_size
+```
+**Scaling the Accumulation**: Divides the global target accumulation by the world size.
+
+The Global Effective Batch Size is now distributed: each GPU handles $1/\mathbf{W}$ of the total gradient accumulation work. This maintains the desired global batch size ($B_{global}$).
+
+$\mathbf{A}_{\text{new}} = \mathbf{A}_{\text{target}} / \mathbf{W}$
+
+
+```python
+else:
+    ddp_world_size = 1
+```
+Starts the block for single-process (non-DDP) execution. Sets world size to 1 if not DDP.
+
+Simplifies the effective batch size calculation later.
+
+
+```python
+tokens_per_iter = gradient_accumulation_steps * ddp_world_size * batch_size * block_size
+```
+**Global Effective Batch Size Calculation**: Calculates the total number of tokens processed per single parameter update.
+
+This confirms the effective global batch size, which is a key metric in LLM training.
+
+$\mathbf{B}_{global} = \mathbf{A} \times \mathbf{W} \times \mathbf{B}_{micro} \times \mathbf{T}$
+
+```python
+print(f"tokens per iteration will be: {tokens_per_iter:,}")
+```
+Logs the calculated global effective batch size.	
+
+Provides immediate feedback to the user about the scale of the training run.
+
+
+**Tensor Context: DDP Scaling**
+
+The goal is to achieve a **target Global Effective Batch Size** of $B_{global} = 491,520$ tokens.
+
+* **Initial (Global) Configuration:**
+  * $\mathbf{A}_{\text{target}} = 40$ (Accumulation steps)
+  * $\mathbf{W} = 8$ (World size / # of GPUs)
+  * $\mathbf{B}_{micro} = 12$ (Batch size per GPU)
+  * $\mathbf{T} = 1024$ (Block size)
+* **Post-DDP Scaling:**
+  * The script performs: $\mathbf{A}_{\text{new}} = \mathbf{A}_{\text{target}} / \mathbf{W} = 40 / 8 = 5$.
+  * **Final Global Calculation:**
+
+$$B_{global} = \mathbf{A}_{\text{new}} \times \mathbf{W} \times \mathbf{B}_{micro} \times \mathbf{T} = 5 \times 8 \times 12 \times 1024 = 491,520 \text{ tokens}$$ 
+
+The total effective batch size remains the desired amount, but the gradient accumulation is handled in just 5 micro-batches per GPU before synchronization and a single parameter update.
+
+
+## System Setup and Data Loading
+
+```python
+if master_process: 
+    os.makedirs(out_dir, exist_ok=True)
+```
+**Output Directory**: Creates the output folder (`out`) only on the master process.	
+
+Prevents all worker processes from simultaneously trying to create the same directory, which could cause a race condition.
+
+```python
+torch.manual_seed(1337 + seed_offset)
+```
+**Random Seed**: Sets the initial seed for PyTorch's random number generators.
+
+Ensures reproducibility. Adding `seed_offset` (which is $0$ for the master process, and `ddp_rank` otherwise) ensures each DDP process has a slightly different, deterministic sequence of random numbers, especially useful for data loading.
+
+```python
+torch.backends.cuda.matmul.allow_tf32 = True
+```
+Enables the use of **TensorFloat32 (TF32)** for matrix multiplications.	
+
+TF32 uses 10 bits of precision for the mantissa (like FP32) but the range of FP16, speeding up computation on recent NVIDIA GPUs (e.g., A100/H100) with minimal loss of accuracy.
+
+```python
+device_type = 'cuda' if 'cuda' in device else 'cpu'
+```
+Derives the generic device type.	
+
+Used later to determine whether to use CUDA-specific features like `torch.autocast`.
+
+```python
+ptdtype = {'float32': ..., 'float16': ...}[dtype]
+```
+Maps the config string (`dtype`) to the corresponding PyTorch data type (`torch.float32`, etc.).	
+
+Prepares the exact tensor data type to be used by `autocast`.
+
+```python
+ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
+```
+**Automatic Mixed Precision (AMP) Context**: Creates the context manager for mixed-precision training.	
+
+`torch.amp.autocast` automatically casts model computations to `ptdtype` (like bfloat16) where safe and beneficial, while preserving critical operations (like loss calculation) in full precision. For CPU, it defaults to a no-op context (`nullcontext`).
+
+
+**The Data Loader (`get_batch`)**
+
+```python
+data_dir = os.path.join('data', dataset)
+```
+Sets the path to the dataset folder (e.g., `data/openwebtext`).
+
+```python
+def get_batch(split):
+```
+Defines the function to fetch a batch of data, for either '`train`' or '`val`' split.	
+
+Called repeatedly by the main training loop.
+
+```python
+data = np.memmap(..., mode='r')
+```
+**Memory-Mapped Data**: Loads the tokenized data (`train.bin` or `val.bin`) using `numpy.memmap`.	
+
+**Memory efficiency**: `memmap` treats the file on disk as if it were a large array in memory. This is crucial for datasets larger than available RAM, avoiding loading the entire dataset into memory.	
+
+Data is a 1D array of `uint16` indices.
+
+```python
+ix = torch.randint(len(data) - block_size, (batch_size,))
+```
+Generates `batch_size` random starting indices for sequences.
+
+Randomly samples non-overlapping sequences from the dataset.
+
+$\mathbf{ix} \in (\mathbf{B})$ (A tensor of $\mathbf{B}$ integer starting positions).
+
+```python
+x = torch.stack([torch.from_numpy(...)])
+```
+**Input Data (x)**: Stacks the token indices starting at $i$ for a length of block_size ($\mathbf{T}$).
+
+These are the input tokens for the model (the current context).
+
+* $\mathbf{x} \in (\mathbf{B, T})$
+
+```python
+y = torch.stack([torch.from_numpy(...)])
+```
+**Target Data (y)**: Stacks the token indices starting at $i+1$ for a length of `block_size` ($\mathbf{T}$).
+
+These are the ground truth tokens shifted one position to the right. $\mathbf{y}$ is $\mathbf{x}$ shifted. This implements the **Language Modeling objective** (predict the next token).
+
+* $\mathbf{y} \in (\mathbf{B, T})$
+
+```python
+x.pin_memory().to(device, non_blocking=True)
+```
+**CUDA Optimization**: Pins CPU tensors to page-locked memory and transfers them asynchronously to the GPU.	
+
+**Efficiency**: Pinned memory enables faster CPU-to-GPU transfers. `non_blocking=True` allows the data transfer to overlap with computation, improving throughput.
+
+**Initial State and Vocab Check**
+
+```python
+iter_num = 0
+```
+Initializes the iteration counter. Tracks the number of gradient update steps performed.
+
+```python
+best_val_loss = 1e9
+```
+Initializes the best validation loss. Used for checkpointing; the model is saved only if the current validation loss is better (lower) than the best seen so far.
+
+```python
+if os.path.exists(meta_path): 
+    ...
+```
+**Vocab Check**: Attempts to load vocabulary information from a `meta.pkl` file in the data directory.	
+
+The training script needs the correct `vocab_size` to build the `GPT` model with the correct size for the `wte` and `lm_head` layers.
+
+**Model Instantiation and Initialization**
+It handles the critical decision of how to create the `GPT` model—either from scratch, by resuming a previous training run, or by loading official pre-trained GPT-2 weights.
+
+```python
+model_args = dict(...)
+```
+Creates a dictionary to hold all hyperparameters required to construct the `GPTConfig`.
+
+Collects parameters like $L$, $H$, $C$, $T$, `bias`, and `dropout` which were read from the command line/config files.
+
+**Initialization Path: `init_from == 'scratch'`**
+
+```python
+if init_from == 'scratch':
+```
+Executes if the model needs to be initialized with random weights.	
+
+This is the default path for starting a new training run.
+
+```python
+model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 50304
+```
+Sets the vocabulary size.
+
+It first checks if the size was determined from the dataset's `meta.pkl`. If not found, it defaults to **50304**, the GPT-2 size rounded up for efficiency.
+
+$\mathbf{V}$ is determined here.
+
+```python
+gptconf = GPTConfig(**model_args)
+```
+Creates the model configuration object.	Instantiates the blueprint for the model.
+
+```python
+model = GPT(gptconf)
+```
+Instantiates the `GPT` model. The model is created with all layers and weights initialized using the random and scaled initializations defined in the `GPT` class.
+
+**Initialization Path: `init_from == 'resume'`**
+
+```python
+elif init_from == 'resume':
+```
+Executes to load a model and state from a local checkpoint.	
+
+This allows long-running training jobs to be restarted after interruption or preemption.
+
+```python
+checkpoint = torch.load(ckpt_path, map_location=device)
+```
+Loads the checkpoint file (`ckpt.pt`) to the current device (CPU or GPU).
+
+The checkpoint contains the model state, optimizer state, and training metadata.
+
+`checkpoint` is a Python dictionary.
+
+```python
+for k in ['n_layer', ..., 'vocab_size']: 
+    model_args[k] = checkpoint_model_args[k]
+```
+**Forces Model Consistency:** Overrides the command-line parameters for critical dimensions ($L, H, C, T, V$) with those saved in the checkpoint.
+
+**Crucial:** These parameters define the model's architecture; they must match the checkpoint or the weights cannot be loaded.
+
+```python
+unwanted_prefix = '_orig_mod.'... model.load_state_dict(state_dict)
+```
+Loads the model weights from the checkpoint.
+
+This includes code to handle a potential prefix (`_orig_mod.`) often added by `torch.compile` or `DDP` in some older versions, which would otherwise cause the key names to mismatch.
+
+```python
+iter_num = checkpoint['iter_num']; best_val_loss = checkpoint['best_val_loss']
+```
+Resumes the training state. Ensures the learning rate scheduler, optimization logic, and checkpointing logic continue from the exact point of the interruption.
+
+
+**Initialization Path: `init_from.startswith('gpt2')`**
+
+```python
+elif init_from.startswith('gpt2'):
+```
+Executes to initialize from a specific pre-trained GPT-2 model (e.g., `'gpt2-medium'`).	
+
+Allows fine-tuning or zero-shot evaluation on powerful, publicly available weights.
+
+```python
+model = GPT.from_pretrained(init_from, override_args)
+```
+Uses the class method to load official weights.	
+
+The `from_pretrained` method downloads the weights and configures the NanoGPT model to match the GPT-2 architecture.
+
+```python
+for k in ['n_layer', ...]: 
+    model_args[k] = getattr(model.config, k)
+```
+Updates local `model_args` with the actual parameters used by the loaded GPT-2 model.
+
+Ensures that if this model is later saved, the checkpoint will contain the correct, official GPT-2 configuration parameters (e.g., $C=1024$ for 'medium').
+
+**Final Setup**
+
+```python
+if block_size < model.config.block_size: 
+    model.crop_block_size(block_size)
+```
+**Model Surgery**: If the user requested a smaller sequence length (`block_size`), the model is cropped.	
+
+Reduces memory usage by shrinking the positional embedding table and the casual attention mask, as sequences longer than the requested `block_size` will never be used.
+
+```python
+model.to(device)
+```
+Moves the entire model to the selected device.	
+
+This places all parameters and buffers onto the assigned GPU, where the training computation will occur.
+
+
+## Optimizer, Compilation, and Utilities
+
+**GradScaler and Optimizer Setup**
+
+```python
+scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
+```
+Gradient Scaler Initialization: Creates the `GradScaler`.	
+
+Required for FP16 training. In float16 (`FP16`), gradients can become too small ("underflow"). The scaler multiplies the loss by a large factor before backpropagation and then scales gradients back down, preserving precision. If using `bfloat16` or `float32`, or if `dtype` is not `'float16'`, it's a no-op.
+
+```python
+optimizer = model.configure_optimizers(...)
+```
+Optimizer Instantiation: Calls the custom method on the `GPT` model to create the `AdamW` optimizer.
+
+The custom method implements **selective weight decay**, ensuring biases and LayerNorm parameters are excluded from decay (a common best practice for LLMs).
+
+```python
+if init_from == 'resume': 
+    optimizer.load_state_dict(checkpoint['optimizer'])
+```
+**Optimizer State Resumption:** If resuming training, loads the optimizer's internal state (e.g., first and second moment estimates).	
+
+Essential to maintain the momentum and history of the optimizer when restarting a training run.
+
+```python
+checkpoint = None
+```
+Frees up memory after loading necessary data.	
+
+The checkpoint dictionary can be large, holding the entire model and optimizer state.
+
+
+**Model Optimization and DDP Wrap**
+
+```python
+if compile: 
+    ... 
+    model = torch.compile(model)
+```
+Model Compilation: Applies PyTorch 2.0's dynamic graph compiler.	
+
+Compiles the PyTorch code into highly optimized execution graphs, significantly reducing overhead and increasing training speed (up to 30% faster on modern GPUs). Requires PyTorch >= 2.0.
+
+```python
+if ddp: 
+    model = DDP(model, device_ids=[ddp_local_rank])
+```
+**DDP Wrapping:** Wraps the model instance in the `DistributedDataParallel` container.	
+
+**Scalability**: DDP handles the synchronization of gradients across all GPUs after the backward pass (`all-reduce`), ensuring all copies of the model remain consistent.	
+
+`device_ids` ensures the model uses the GPU assigned by `ddp_local_rank`.
+
+**The `estimate_loss` Function (Evaluation)**
+
+```python
+@torch.no_grad()
+```
+Decorator that disables gradient calculation.
+
+Efficiency: Evaluation does not require backpropagation, so disabling gradients saves memory and computation time.
+
+```python
+model.eval()
+```
+Sets the model to evaluation mode.	
+
+Disables layers that behave differently during training (e.g., **Dropout** is disabled, and **LayerNorm** uses its running statistics if applicable).
+
+```python
+for k in range(eval_iters): 
+    X, Y = get_batch(split)
+```
+Loops for a fixed number of batches (`eval_iters`) to get a statistically reliable loss average.	
+
+The final mean loss is a stable metric for tracking model performance.
+
+```python
+with ctx: 
+    logits, loss = model(X, Y)
+```
+Runs the forward pass using the mixed-precision context.	
+
+Ensures the model runs consistently in the selected `dtype`.
+
+```python
+out[split] = losses.mean()
+```
+Calculates the average loss over the evaluation batches.	
+
+The final result is the validation loss, used for checkpointing and plotting.
+
+```python
+model.train()
+```
+Sets the model back to training mode.	
+
+Crucial for re-enabling dropout and other training-specific behaviors before the main loop resumes.
+
+
+**The `get_lr` Function (Learning Rate Scheduler)**
+
+This function implements the standard $\text{LLM}$ training schedule: warmup followed by cosine decay.
+
+```python
+if it < warmup_iters: 
+    return learning_rate * (it + 1) / (warmup_iters + 1)
+```
+**Linear Warmup**: Linearly increases the learning rate from $0$ to `learning_rate` over the first `warmup_iters` steps.
+
+**Stability**: Prevents large gradient spikes at the beginning of training when weights are randomly initialized.
+
+```python
+if it > lr_decay_iters: 
+    return min_lr
+```
+**Floor**: Sets the learning rate to a minimum value if the decay phase is complete.	
+
+Prevents the LR from dropping to zero, which can halt learning.
+
+```python
+coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))
+```
+Cosine Decay: Calculates the cosine coefficient that smoothly decays from $1.0$ down to $0.0$.
+
+The cosine function provides a smooth decay curve, which is empirically shown to work well for LLM training.
+
+$\text{Coeff} \in [0, 1]$
+
+```python
+return min_lr + coeff * (learning_rate - min_lr)
+```
+**Final LR Calculation**: Interpolates between $\text{min\_lr}$ and the peak $\text{learning\_rate}$ using the cosine coefficient.
+
+The LR decays smoothly to the floor $\text{min\_lr}$.
+
+## The Main Training Loop
+
+This final block of `train.py` contains the main training loop, the core logic responsible for iteratively adjusting the model's weights and logging performance metrics.
+
+**Pre-Loop Setup and Preparation**
+
+```python
+if wandb_log and master_process: 
+    ... 
+    wandb.init(...)
+```
+Initializes Weights & Biases (W&B) tracking.	
+
+Only the `master_process` performs logging. W&B provides a robust dashboard for monitoring training metrics.
+
+```python
+X, Y = get_batch('train')
+```
+**Prefetches the first batch of data**.	Ensures the GPU is not idle waiting for the first training data load when the loop starts.
+
+```python
+raw_model = model.module if ddp else model
+```
+**Model Unwrapping:** Gets a reference to the actual `GPT` instance.	
+
+If DDP is used, the `DDP` wrapper encapsulates the model, which must be unwrapped (`.module`) to access core methods like `state_dict()` (for checkpointing) or `estimate_mfu()`.
+
+**The Evaluation and Checkpointing Block (Run Every `eval_interval`)**
+
+```python
+if iter_num % eval_interval == 0 and master_process:
+```
+Checks if it's time to evaluate, only runs on the master process.	
+
+Evaluation is time-consuming and redundant across DDP processes.
+
+```python
+losses = estimate_loss()
+```
+Calls the function to estimate loss on both the training and validation splits.	
+
+Gathers a stable measure of the model's generalization ability.
+
+```python
+if losses['val'] < best_val_loss or always_save_checkpoint:
+```
+**Checkpointing Logic**: Saves the model if the validation loss is a new record low OR if the user configured the script to save every time (`always_save_checkpoint=True`).	
+
+Ensures the best-performing model is saved, or that training state can be resumed regularly.
+
+```python
+checkpoint = { ... } torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt'))
+```
+Dumps the necessary state: model weights, optimizer state, training state (`iter_num`, `best_val_loss`), and configuration.	
+
+This complete state allows the training to resume seamlessly.
+
+**Gradient Accumulation Loop (Micro-Steps)**
+
+```python
+for micro_step in range(gradient_accumulation_steps):
+```
+Loops through the micro-batches needed for a single parameter update.	
+
+**Gradient Accumulation:** Allows the simulation of a huge batch size without requiring massive GPU memory.
+
+```python
+model.require_backward_grad_sync = (micro_step == gradient_accumulation_steps - 1)
+```
+**DDP Optimization**: Only enables gradient synchronization (all-reduce) on the final micro-step.	
+
+**Efficiency**: Prevents unnecessary and slow inter-GPU communication on all but the last step, greatly speeding up accumulation.
+
+```python
+with ctx: logits, loss = model(X, Y)
+```
+Forward pass within the AMP context. Computes the loss for the micro-batch.
+
+```python
+loss = loss / gradient_accumulation_steps
+```
+**Loss Scaling:** Scales the loss by the number of accumulation steps.
+
+Since loss is summed/averaged across the micro-batches during the backward pass, dividing it now ensures the final gradient magnitude remains correct.
+
+```python
+X, Y = get_batch('train')
+```
+**Asynchronous Prefetch**: Immediately loads the next micro-batch while the backward pass runs on the current one. Hides data loading latency, maximizing GPU utilization.
+
+```python
+scaler.scale(loss).backward()
+```
+**Backward Pass**: Computes the gradients. `scaler.scale()` is used to prevent FP16 underflow.
+
+**Parameter Update and Timing**
+
+```python
+if grad_clip != 0.0: 
+    scaler.unscale_(optimizer)
+    torch.nn.utils.clip_grad_norm_(...)
+```
+**Gradient Clipping:** Clips the magnitude of the gradients to prevent "**exploding gradients."**
+
+Necessary for training deep models, especially with large learning rates, to maintain stability. `scaler.unscale_` is required before clipping in AMP.
+
+```python
+scaler.step(optimizer)
+```
+Updates the weights based on the accumulated, clipped, and potentially scaled gradients.
+
+In AMP, the scaler checks if the gradients are valid before applying the step.
+
+```python
+scaler.update()
+```
+Updates the scale factor for the next iteration.
+
+If the last step succeeded, the scale increases; if it failed (e.g., gradients became `NaN`), the scale decreases.
+
+```python
+optimizer.zero_grad(set_to_none=True)
+```
+Clears the gradients in the model's parameters.	
+
+**Memory Optimization:** Setting to `None` frees the gradient memory immediately, rather than waiting for the next zeroing, saving GPU memory.
+
+```python
+mfu = raw_model.estimate_mfu(...)
+```
+Estimates **Model Flop Utilization (MFU)**:	Calculates how effectively the theoretical FLOPs of the GPU are being used by the model computation, which is the gold standard metric for LLM training efficiency. MFU measures percentage utilization.
+
+**Termination**
+
+```python
+if iter_num > max_iters: break
+```
+Exits the loop once the maximum configured number of steps is reached.
+
+```python
+if ddp: destroy_process_group()
+```
+Cleans up DDP resources. Releases memory and terminates the distributed communication backend gracefully.
