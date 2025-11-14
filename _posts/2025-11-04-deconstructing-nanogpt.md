@@ -24,7 +24,7 @@ header:
 If you have applied for a Data Scientist or Machine Learning Engineer recently, you have probably been asked atleast once to explain the Transformer architecture. While Andrej Karpathy has done a great job breaking down the entire model from scratch, however, there are certain nuances to it, which is not so obvious for someone who is not familiar with the intricacies and *math-dance* involved in it.
 The primary goal of this article is to provide deep comprehension - to understand exactly what every line of code does, why it is necessary for the Transformer architecture, and how the tensor shapes evolve through the forward and backward passes. This detailed analysis will transform the seemingly complex structure of a modern Large Language Model (LLM) into a sequence of clear, manageable operations, providing a solid foundation for anyone looking to build, modify, or debug these powerful models. Without much-ado let's get started.
 
-NOTE: Before proceeding any further, if you have not yet watched the [NanoGPT video](https://youtu.be/kCc8FmEb1nY) by A[ndrej Karpathy](https://karpathy.ai/), please watch the video first, then come back to this article for the explanation.
+<span style="color:red">**NOTE:**</span> Before proceeding any further, if you have not yet watched the [NanoGPT video](https://youtu.be/kCc8FmEb1nY) by [Andrej Karpathy](https://karpathy.ai/), please watch the video first, then come back to this article for the explanation.
 
 # 📂 Organisation: The NanoGPT Structure
 
@@ -47,7 +47,9 @@ This is a very simplified version of an actual LLM deployment, for educational p
 
 # Configuration
 
-## Training Configuration (config/train_gpt2.py)
+## Training Configuration
+
+Source: [config/train_gpt2.py](https://github.com/karpathy/nanoGPT/blob/master/config/train_gpt2.py)
 
 This file contains the configuration for the training run, specifying things like logging, batch sizes, learning schedule, and evaluation metrics.
 
@@ -157,7 +159,7 @@ Now that we have covered the GPTConfig, let's move on to the model itself
 ---
 
 # Model 
-`nanoGPT/model.py`
+Source: [nanoGPT/model.py](https://github.com/karpathy/nanoGPT/blob/master/model.py)
 
 ## Layer Normalization
 The first thing that we encounter in the model file is a custom `LayerNorm` implementation.
@@ -935,7 +937,9 @@ def estimate_mfu(...)
 A common metric in LLM research to gauge hardware and software efficiency, normalizing training speed across different systems.
 
 
-# The Training Script Setup (`train.py`)
+# The Training Script Setup
+
+Source: [nanoGPT/train.py](https://github.com/karpathy/nanoGPT/blob/master/train.py)
 
 Introductory Comment Block:
 
