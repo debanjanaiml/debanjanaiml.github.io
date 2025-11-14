@@ -10,9 +10,9 @@ use_math: true
 toc: true
 toc_label: "Table of Contents"
 toc_icon: "bookmark"
-excerpt: "We are embarking on a line-by-line breakdown of NanoGPT, Andrej Karpathy's concise and educational implementation of a GPT model."
+excerpt: "Line-by-line breakdown of NanoGPT, explaining each line of code in Andrej Karpathy's concise implementation of a GPT model."
 header:
-  teaser: "/assets/images/blogs/static_embeddings.png"
+  teaser: "/assets/images/blogs/nanogpt-cover.png"
 ---
 
 [![View GitHub Repo](https://img.shields.io/badge/GitHub-View_on_GitHub-blue?logo=GitHub)](https://github.com/karpathy/nanoGPT)
@@ -913,9 +913,12 @@ transposed = [...] ...
 ```
 **Weight Alignment and Transposition**: Filters keys and handles the `Conv1D` vs. `Linear` mismatch.
 
-Official OpenAI weights use a PyTorch implementation of `Conv1D` which stores weights in $(\mathbf{C}_{\text{out}}, \mathbf{C}_{\text{in}})$ . 
+Official OpenAI weights use a PyTorch implementation of `Conv1D` which stores weights in 
+$$(\mathbf{C}_{\text{out}}, \mathbf{C}_{\text{in}})$$
 
-NanoGPT uses standard nn.Linear, which expects $(\mathbf{C}_{\text{in}}, \mathbf{C}_{\text{out}})$ . These weights must be transposed (`.t()`) during transfer.
+NanoGPT uses standard nn.Linear, which expects 
+$$(\mathbf{C}_{\text{in}}, \mathbf{C}_{\text{out}})$$ 
+These weights must be transposed (`.t()`) during transfer.
 
 ```python
 def configure_optimizers(...)
