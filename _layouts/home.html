@@ -6,35 +6,36 @@ layout: default
   {% include sidebar.html %}
   <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
     <div class="page__inner-wrap">
+      
       <section class="page__content" itemprop="text">
         {{ content }}
+        
+        <h2 class="archive__subtitle">Recent Posts</h2>
+        <div class="grid__wrapper">
+        {% for post in site.posts limit:6 %}
+          {% include archive-single.html type="grid" %}
+        {% endfor %}
+        </div>
+
+        {% assign featured_pages = site.pages | where: "featured", true %}
+        {% if featured_pages.size > 0 %}
+        <h2 class="archive__subtitle">Featured Portfolio</h2>
+        <div class="grid__wrapper">
+        {% for item in featured_pages %}
+          <article class="archive__item">
+            <h3><a href="{{ item.url | relative_url }}">{{ item.title }}</a></h3>
+            <p>{{ item.excerpt | strip_html | truncate: 150 }}</p>
+          </article>
+        {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="cta__footer" style="margin-top: 40px;">
+          <p>Interested in collaborating or hiring?</p>
+          <a href="/about/" class="btn">Learn More</a>
+        </div>
+        
       </section>
-      
-      <h2 class="archive__subtitle">Recent Posts</h2>
-      <div class="grid__wrapper">
-      {% for post in site.posts limit:6 %}
-        {% include archive-single.html type="grid" %}
-      {% endfor %}
       </div>
-
-      {% assign featured_pages = site.pages | where: "featured", true %}
-      {% if featured_pages.size > 0 %}
-      <h2 class="archive__subtitle">Featured Portfolio</h2>
-      <div class="grid__wrapper">
-      {% for item in featured_pages %}
-        <article class="archive__item">
-          <h3><a href="{{ item.url | relative_url }}">{{ item.title }}</a></h3>
-          <p>{{ item.excerpt | strip_html | truncate: 150 }}</p>
-        </article>
-      {% endfor %}
-      </div>
-      {% endif %}
-
-      <div class="cta__footer" style="margin-top: 40px;">
-        <p>Interested in collaborating or hiring?</p>
-        <a href="/about/" class="btn">Learn More</a>
-      </div>
-      
-    </div>
   </article>
 </div>
