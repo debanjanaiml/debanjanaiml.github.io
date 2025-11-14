@@ -1,13 +1,35 @@
 ---
-layout: archive
+layout: default
 ---
 
-{{ content }}
+<div class="page__content">
+  {{ content }}
+</div>
 
-<h3 class="archive__subtitle">{{ site.data.ui-text[site.locale].recent_posts | default: "Recent Posts" }}</h3>
-
-{% for post in paginator.posts %}
-  {% include archive-single.html %}
+<!-- Recent Posts Section -->
+<h2 class="archive__subtitle">Recent Posts</h2>
+<div class="grid__wrapper">
+{% for post in site.posts limit:6 %}
+  {% include archive-single.html type="grid" %}
 {% endfor %}
+</div>
 
-{% include paginator.html %}
+<!-- Portfolio Section (auto pulls pages flagged as featured) -->
+{% assign featured_pages = site.pages | where: "featured", true %}
+{% if featured_pages.size > 0 %}
+<h2 class="archive__subtitle">Featured Portfolio</h2>
+<div class="grid__wrapper">
+{% for item in featured_pages %}
+  <article class="archive__item">
+    <h3><a href="{{ item.url | relative_url }}">{{ item.title }}</a></h3>
+    <p>{{ item.excerpt | strip_html | truncate: 150 }}</p>
+  </article>
+{% endfor %}
+</div>
+{% endif %}
+
+<!-- Footer CTA -->
+<div class="cta__footer" style="margin-top: 40px;">
+  <p>Interested in collaborating or hiring?</p>
+  <a href="/about/" class="btn">Learn More</a>
+</div>
